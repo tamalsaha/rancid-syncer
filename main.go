@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -87,6 +88,8 @@ func IsRancherManaged(kc client.Client) (bool, error) {
 	err := kc.Get(context.TODO(), key, &obj)
 	if err == nil {
 		return true, nil
+	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+		return false, nil
 	}
 	return false, err
 }

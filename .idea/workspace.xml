@@ -6,9 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="e4ce179c-fe52-4b0d-8bc9-95010bb17600" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/management/v1alpha1/project_types.go" beforeDir="false" afterPath="$PROJECT_DIR$/api/management/v1alpha1/project_types.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/management/v1alpha1/zz_generated.deepcopy.go" beforeDir="false" afterPath="$PROJECT_DIR$/api/management/v1alpha1/zz_generated.deepcopy.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/crd/bases/management.k8s.appscode.com_projects.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/config/crd/bases/management.k8s.appscode.com_projects.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

@@ -17,20 +17,27 @@ limitations under the License.
 package v1alpha1
 
 import (
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // ProjectSpec defines the desired state of Project
 type ProjectSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Project. Edit project_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:default=User
+	Type              ProjectType               `json:"type,omitempty"`
+	Namespaces        []string                  `json:"namespaces,omitempty"`
+	NamespaceSelector *metav1.LabelSelector     `json:"namespaceSelector,omitempty"`
+	Quota             core.ResourceRequirements `json:"quota,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=Default;System;User
+type ProjectType string
+
+const (
+	ProjectDefault ProjectType = "Default"
+	ProjectSystem  ProjectType = "System"
+	ProjectUser    ProjectType = "User"
+)
 
 // ProjectStatus defines the observed state of Project
 type ProjectStatus struct {

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2/klogr"
-	dbapi "kubedb.dev/apimachinery/apis/kubedb/v1alpha2"
 	kubedbscheme "kubedb.dev/apimachinery/client/clientset/versioned/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,13 +53,40 @@ func useKubebuilderClient() error {
 		return err
 	}
 
-	var pglist dbapi.PostgresList
-	err = kc.List(context.TODO(), &pglist)
+	rancher, err := IsRancherManaged(kc)
 	if err != nil {
 		return err
 	}
-	for _, db := range pglist.Items {
-		fmt.Println(client.ObjectKeyFromObject(&db))
-	}
+	fmt.Println("IsRancherManaged", rancher)
 	return nil
+}
+
+/*
+> k get clusters.management.cattle.io local -o yaml
+
+apiVersion: management.cattle.io/v3
+kind: Cluster
+metadata:
+  annotations:
+    provisioner.cattle.io/encrypt-migrated: "true"
+  creationTimestamp: "2023-09-17T19:58:59Z"
+  generation: 2
+  name: local
+  resourceVersion: "1994"
+  uid: 920a0c9a-7f8a-46c7-8ad2-b97000e1a073
+*/
+
+func IsRancherManaged(kc client.Client) (bool, error) {
+	var obj unstructured.Unstructured
+	obj.SetAPIVersion("management.cattle.io/v3")
+	obj.SetKind("Cluster")
+
+	key := client.ObjectKey{
+		Name: "local",
+	}
+	err := kc.Get(context.TODO(), key, &obj)
+	if err == nil {
+		return true, nil
+	}
+	return false, err
 }

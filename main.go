@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
 
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/tamalsaha/rancid-syncer/api/management/v1alpha1"
+	alertsv1alpha1 "go.appscode.dev/alerts/apis/alerts/v1alpha1"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,6 +28,7 @@ import (
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cu "kmodules.xyz/client-go/client"
 	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
+	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
@@ -34,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
+	chartsapi "x-helm.dev/apimachinery/apis/charts/v1alpha1"
 )
 
 func NewClient() (*rest.Config, versioned.Interface, client.Client, error) {
@@ -91,7 +94,8 @@ func useKubebuilderClient() error {
 		return err
 	}
 	fmt.Println(string(data))
-	os.Exit(1)
+	// os.Exit(1)
+	// -----------------------------------------------------------
 
 	svc, err := FindServiceForPrometheus(rmc, types.NamespacedName{
 		Namespace: "cattle-monitoring-system",
@@ -102,10 +106,7 @@ func useKubebuilderClient() error {
 	}
 	fmt.Println(svc.Name)
 
-	rancher, err := IsRancherManaged(kc)
-	if err != nil {
-		return err
-	}
+	rancher := IsRancherManaged(kc.RESTMapper())
 	fmt.Println("IsRancherManaged", rancher)
 
 	projects, err := ListRancherProjects(kc)
@@ -136,22 +137,72 @@ metadata:
   uid: 920a0c9a-7f8a-46c7-8ad2-b97000e1a073
 */
 
-func IsRancherManaged(kc client.Client) (bool, error) {
-	var obj unstructured.Unstructured
-	obj.SetAPIVersion("management.cattle.io/v3")
-	obj.SetKind("Cluster")
-
-	key := client.ObjectKey{
-		Name: "local",
+func DetectClusterManager(kc client.Client) ClusterManager {
+	if IsOpenClusterManaged(kc.RESTMapper()) {
+		return ManagedByACE
 	}
-	err := kc.Get(context.TODO(), key, &obj)
-	if err == nil {
-		return true, nil
-	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
-		return false, nil
+	if IsRancherManaged(kc.RESTMapper()) {
+		return ManagedByRancher
 	}
-	return false, err
+	return ManagedByACE
 }
+
+func IsOpenClusterManaged(mapper meta.RESTMapper) bool {
+	if _, err := mapper.RESTMappings(schema.GroupKind{
+		Group: "cluster.open-cluster-management.io",
+		Kind:  "ManagedCluster",
+	}); err == nil {
+		return true
+	}
+	if _, err := mapper.RESTMappings(schema.GroupKind{
+		Group: "work.open-cluster-management.io",
+		Kind:  "AppliedManifestWork",
+	}); err == nil {
+		return true
+	}
+	return false
+}
+
+/*
+> k get clusters.management.cattle.io local -o yaml
+
+apiVersion: management.cattle.io/v3
+kind: Cluster
+metadata:
+  annotations:
+    provisioner.cattle.io/encrypt-migrated: "true"
+  creationTimestamp: "2023-09-17T19:58:59Z"
+  generation: 2
+  name: local
+  resourceVersion: "1994"
+  uid: 920a0c9a-7f8a-46c7-8ad2-b97000e1a073
+*/
+
+func IsRancherManaged(mapper meta.RESTMapper) bool {
+	if _, err := mapper.RESTMappings(schema.GroupKind{
+		Group: "management.cattle.io",
+		Kind:  "Cluster",
+	}); err == nil {
+		return true
+	}
+	return false
+}
+
+//	var obj unstructured.Unstructured
+//	obj.SetAPIVersion("management.cattle.io/v3")
+//	obj.SetKind("Cluster")
+//
+//	key := client.ObjectKey{
+//		Name: "local",
+//	}
+//	err := kc.Get(context.TODO(), key, &obj)
+//	if err == nil {
+//		return true, nil
+//	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+//		return false, nil
+//	}
+//	return false, err
+//}
 
 const labelKeyRancherProjectId = "field.cattle.io/projectId"
 
@@ -515,42 +566,42 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	return &pcfg, nil
 }
 
-func IsDefaultPrometheus(kc client.Client, gvk schema.GroupVersionKind, key types.NamespacedName) (bool, error) {
-	rancher, err := IsRancherManaged(kc)
+func IsRancherSystemResource(kc client.Client, key types.NamespacedName) (bool, error) {
+	if !IsRancherManaged(kc.RESTMapper()) {
+		return false, errors.New("not a Rancher managed cluster")
+	}
+
+	if key.Namespace == metav1.NamespaceSystem {
+		return true, nil
+	}
+
+	var ns core.Namespace
+	err := kc.Get(context.TODO(), client.ObjectKey{Name: key.Namespace}, &ns)
 	if err != nil {
 		return false, err
 	}
-	if rancher {
-		if key.Namespace == metav1.NamespaceSystem {
-			return true, nil
-		}
-
-		var ns core.Namespace
-		err = kc.Get(context.TODO(), client.ObjectKey{Name: key.Namespace}, &ns)
-		if err != nil {
-			return false, err
-		}
-		projectId, exists := ns.Labels[labelKeyRancherProjectId]
-		if !exists {
-			return false, nil
-		}
-
-		var sysNS core.Namespace
-		err = kc.Get(context.TODO(), client.ObjectKey{Name: metav1.NamespaceSystem}, &sysNS)
-		if err != nil {
-			return false, err
-		}
-
-		sysProjectId, exists := ns.Labels[labelKeyRancherProjectId]
-		if !exists {
-			return false, nil
-		}
-		return projectId == sysProjectId, nil
+	projectId, exists := ns.Labels[labelKeyRancherProjectId]
+	if !exists {
+		return false, nil
 	}
 
+	var sysNS core.Namespace
+	err = kc.Get(context.TODO(), client.ObjectKey{Name: metav1.NamespaceSystem}, &sysNS)
+	if err != nil {
+		return false, err
+	}
+
+	sysProjectId, exists := ns.Labels[labelKeyRancherProjectId]
+	if !exists {
+		return false, nil
+	}
+	return projectId == sysProjectId, nil
+}
+
+func IsSingletonResource(kc client.Client, gvk schema.GroupVersionKind, key types.NamespacedName) (bool, error) {
 	var list unstructured.UnstructuredList
 	list.SetGroupVersionKind(gvk)
-	err = kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
+	err := kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
 	if err != nil {
 		return false, err
 	}
@@ -563,8 +614,8 @@ func HandleDefaultPrometheus(kc client.Client, key types.NamespacedName) ([]appc
 		Version: monitoringv1.Version,
 		Kind:    "Prometheus",
 	}
-	isdefault, err := IsDefaultPrometheus(kc, gvk, key)
-	if !isdefault || err != nil {
+	isDefault, err := IsRancherSystemResource(kc, key)
+	if !isDefault || err != nil {
 		return nil, err
 	}
 
@@ -573,4 +624,224 @@ func HandleDefaultPrometheus(kc client.Client, key types.NamespacedName) ([]appc
 	// create Grafana AppBinding
 
 	return nil, nil
+}
+
+type ClusterManager string
+
+const (
+	ManagedByACE     ClusterManager = "ACE"
+	ManagedByRancher ClusterManager = "Rancher"
+	// ManagedByOpenShift ClusterManager = "OpenShift"
+)
+
+func (c ClusterManager) IsUnknown() bool {
+	return c != ManagedByACE && c != ManagedByRancher
+}
+
+const presetsMonitoring = "monitoring-presets"
+
+var defaultPresetsLabels = map[string]string{
+	"charts.x-helm.dev/is-default-preset": "true",
+}
+
+func CreatePreset(kc client.Client, cm ClusterManager, p *monitoringv1.Prometheus) error {
+	presets := GeneratePresetForPrometheus(*p)
+	presetBytes, err := json.Marshal(presets)
+	if err != nil {
+		return err
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   monitoring.GroupName,
+		Version: monitoringv1.Version,
+		Kind:    "Prometheus",
+	}
+
+	switch cm {
+	case ManagedByRancher:
+		isDefault, err := IsRancherSystemResource(kc, client.ObjectKeyFromObject(p))
+		if err != nil {
+			return err
+		}
+		if isDefault {
+			// create ClusterChartPreset
+			err := CreateClusterPreset(kc, presetBytes)
+			if err != nil {
+				return err
+			}
+		} else {
+			// create ChartPreset
+			err2 := CreateProjectPreset(kc, p, presetBytes)
+			if err2 != nil {
+				return err2
+			}
+		}
+	case ManagedByACE:
+		only, err := IsSingletonResource(kc, gvk, client.ObjectKeyFromObject(p))
+		if err != nil {
+			return err
+		}
+		if !only {
+			return fmt.Errorf("multiple Prometheus found in this cluster")
+		}
+
+		// create ClusterChartPreset
+		err = CreateClusterPreset(kc, presetBytes)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown ClusterManager %s", cm)
+	}
+
+	return nil
+}
+
+func CreateClusterPreset(kc client.Client, presetBytes []byte) error {
+	ccp := chartsapi.ClusterChartPreset{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: presetsMonitoring,
+		},
+	}
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &ccp, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*chartsapi.ClusterChartPreset)
+
+		obj.Labels = defaultPresetsLabels
+		obj.Spec = chartsapi.ClusterChartPresetSpec{
+			Values: &runtime.RawExtension{
+				Raw: presetBytes,
+			},
+		}
+
+		return obj
+	})
+	if err != nil {
+		return err
+	}
+	klog.Infof("%s ClusterChartPreset %s", vt, ccp.Name)
+	return nil
+}
+
+func CreateProjectPreset(kc client.Client, p *monitoringv1.Prometheus, presetBytes []byte) error {
+	cp := chartsapi.ChartPreset{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      presetsMonitoring,
+			Namespace: p.Namespace,
+		},
+	}
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &cp, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*chartsapi.ChartPreset)
+
+		obj.Labels = defaultPresetsLabels
+		obj.Spec = chartsapi.ClusterChartPresetSpec{
+			Values: &runtime.RawExtension{
+				Raw: presetBytes,
+			},
+		}
+
+		return obj
+	})
+	if err != nil {
+		return err
+	}
+	klog.Infof("%s ChartPreset %s/%s", vt, cp.Namespace, cp.Name)
+	return nil
+}
+
+type MonitoringPresets struct {
+	Spec MonitoringPresetsSpec `json:"spec,omitempty"`
+	Form MonitoringPresetsForm `json:"form,omitempty"`
+}
+
+type MonitoringPresetsSpec struct {
+	Monitoring ServiceMonitorPreset `json:"monitoring"`
+}
+
+type ServiceMonitorPreset struct {
+	Agent          string               `json:"agent"`
+	ServiceMonitor ServiceMonitorLabels `json:"serviceMonitor"`
+}
+
+type ServiceMonitorLabels struct {
+	// +optional
+	Labels map[string]string `json:"labels"`
+}
+
+type MonitoringPresetsForm struct {
+	Alert AlertPreset `json:"alert"`
+}
+
+type AlertPreset struct {
+	Enabled alertsv1alpha1.SeverityFlag `json:"enabled"`
+	// +optional
+	Labels map[string]string `json:"labels"`
+}
+
+func GeneratePresetForPrometheus(p monitoringv1.Prometheus) MonitoringPresets {
+	var preset MonitoringPresets
+
+	preset.Spec.Monitoring.Agent = string(mona.AgentPrometheusOperator)
+	svcmonLabels, ok := LabelsForLabelSelector(p.Spec.ServiceMonitorSelector)
+	if !ok {
+		klog.Warningln("Prometheus %s/%s uses match expressions in ServiceMonitorSelector", p.Namespace, p.Name)
+	}
+	preset.Spec.Monitoring.ServiceMonitor.Labels = svcmonLabels
+
+	preset.Form.Alert.Enabled = alertsv1alpha1.SeverityFlagCritical
+	ruleLabels, ok := LabelsForLabelSelector(p.Spec.RuleSelector)
+	if !ok {
+		klog.Warningln("Prometheus %s/%s uses match expressions in RuleSelector", p.Namespace, p.Name)
+	}
+	preset.Form.Alert.Labels = ruleLabels
+
+	return preset
+}
+
+func LabelsForLabelSelector(sel *metav1.LabelSelector) (map[string]string, bool) {
+	if sel != nil {
+		if len(sel.MatchExpressions) > 0 {
+			expr := sel.MatchExpressions[0]
+			switch expr.Operator {
+			case metav1.LabelSelectorOpIn:
+				return map[string]string{
+					expr.Key: expr.Values[0],
+				}, false
+			case metav1.LabelSelectorOpNotIn:
+				return map[string]string{
+					expr.Key: "not-" + expr.Values[0],
+				}, false
+			case metav1.LabelSelectorOpExists:
+				return map[string]string{
+					expr.Key: "",
+				}, false
+			case metav1.LabelSelectorOpDoesNotExist:
+				return make(map[string]string), false
+			}
+		} else {
+			return sel.MatchLabels, true
+		}
+	}
+	return make(map[string]string), true
+}
+
+/*
+app.kubernetes.io/instance: kube-prometheus-stack
+app.kubernetes.io/managed-by: Helm
+app.kubernetes.io/part-of: kube-prometheus-stack
+*/
+func FindSiblingAlertManagerForPrometheus(kc client.Client, key types.NamespacedName) (*monitoringv1.Alertmanager, error) {
+	var list monitoringv1.AlertmanagerList
+	err := kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) > 1 {
+		klog.Warningln("multiple alert manager found in namespace %s", key.Namespace)
+	}
+	if len(list.Items) == 0 {
+		return nil, nil
+	}
+	return &list.Items[0], nil
 }

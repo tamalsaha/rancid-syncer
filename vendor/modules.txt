@@ -23,16 +23,16 @@ github.com/Azure/go-autorest/tracing
 # github.com/Masterminds/goutils v1.1.1
 ## explicit
 github.com/Masterminds/goutils
-# github.com/Masterminds/semver/v3 v3.1.1
-## explicit; go 1.12
+# github.com/Masterminds/semver/v3 v3.2.1
+## explicit; go 1.18
 github.com/Masterminds/semver/v3
-# github.com/Masterminds/sprig/v3 v3.0.0-00010101000000-000000000000 => github.com/gomodules/sprig/v3 v3.2.3-0.20220405051441-0a8a99bac1b8
+# github.com/Masterminds/sprig/v3 v3.2.2 => github.com/gomodules/sprig/v3 v3.2.3-0.20220405051441-0a8a99bac1b8
 ## explicit; go 1.17
 github.com/Masterminds/sprig/v3
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
-# github.com/cespare/xxhash/v2 v2.1.2
+# github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
 # github.com/davecgh/go-spew v1.1.1
@@ -54,7 +54,7 @@ github.com/evanphx/json-patch/v5
 # github.com/fatih/structs v1.1.0
 ## explicit
 github.com/fatih/structs
-# github.com/fsnotify/fsnotify v1.5.4
+# github.com/fsnotify/fsnotify v1.6.0
 ## explicit; go 1.16
 github.com/fsnotify/fsnotify
 # github.com/go-logr/logr v1.2.3
@@ -186,8 +186,8 @@ github.com/pkg/errors
 ## explicit; go 1.17
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1
-# github.com/prometheus/client_golang v1.12.2
-## explicit; go 1.13
+# github.com/prometheus/client_golang v1.13.0
+## explicit; go 1.17
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/collectors
 github.com/prometheus/client_golang/prometheus/internal
@@ -195,13 +195,13 @@ github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.2.0
 ## explicit; go 1.9
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.32.1
-## explicit; go 1.13
+# github.com/prometheus/common v0.37.0
+## explicit; go 1.16
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.7.3
-## explicit; go 1.13
+# github.com/prometheus/procfs v0.8.0
+## explicit; go 1.17
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
@@ -217,6 +217,8 @@ github.com/spf13/cast
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
+# github.com/stretchr/testify v1.8.3
+## explicit; go 1.20
 # github.com/yudai/gojsondiff v1.0.0
 ## explicit
 github.com/yudai/gojsondiff
@@ -224,6 +226,10 @@ github.com/yudai/gojsondiff/formatter
 # github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82
 ## explicit
 github.com/yudai/golcs
+# go.appscode.dev/alerts v0.2.0
+## explicit; go 1.18
+go.appscode.dev/alerts/apis/alerts
+go.appscode.dev/alerts/apis/alerts/v1alpha1
 # go.uber.org/atomic v1.7.0
 ## explicit; go 1.13
 go.uber.org/atomic
@@ -238,7 +244,7 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.6.0
+# golang.org/x/crypto v0.9.0
 ## explicit; go 1.17
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
@@ -246,7 +252,7 @@ golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/pkcs12
 golang.org/x/crypto/pkcs12/internal/rc2
 golang.org/x/crypto/scrypt
-# golang.org/x/net v0.9.0
+# golang.org/x/net v0.10.0
 ## explicit; go 1.17
 golang.org/x/net/context
 golang.org/x/net/html
@@ -265,13 +271,13 @@ golang.org/x/oauth2/google/internal/externalaccount
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sys v0.7.0
+# golang.org/x/sys v0.8.0
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/term v0.7.0
+# golang.org/x/term v0.8.0
 ## explicit; go 1.17
 golang.org/x/term
 # golang.org/x/text v0.9.0
@@ -662,7 +668,10 @@ kmodules.xyz/client-go/tools/clusterid
 kmodules.xyz/custom-resources/apis/appcatalog
 kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1
 kmodules.xyz/custom-resources/crds
-# kmodules.xyz/offshoot-api v0.25.0
+# kmodules.xyz/monitoring-agent-api v0.25.1
+## explicit; go 1.18
+kmodules.xyz/monitoring-agent-api/api/v1
+# kmodules.xyz/offshoot-api v0.25.4
 ## explicit; go 1.18
 kmodules.xyz/offshoot-api/api/v1
 # kmodules.xyz/resource-metadata v0.17.18-0.20230918100651-224b4abd8776
@@ -757,6 +766,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 sigs.k8s.io/yaml
 # x-helm.dev/apimachinery v0.0.10
 ## explicit; go 1.19
+x-helm.dev/apimachinery/apis/charts/v1alpha1
 x-helm.dev/apimachinery/apis/releases/v1alpha1
 x-helm.dev/apimachinery/apis/shared
 x-helm.dev/apimachinery/crds

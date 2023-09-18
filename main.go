@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/tamalsaha/rancid-syncer/api/management/v1alpha1"
 	core "k8s.io/api/core/v1"
+	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,9 +16,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
+	kutil "kmodules.xyz/client-go"
 	kmapi "kmodules.xyz/client-go/api/v1"
+	cu "kmodules.xyz/client-go/client"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
@@ -26,7 +33,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func NewClient() (versioned.Interface, client.Client, error) {
+func NewClient() (*rest.Config, versioned.Interface, client.Client, error) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 
@@ -37,12 +44,12 @@ func NewClient() (versioned.Interface, client.Client, error) {
 
 	rmc, err := versioned.NewForConfig(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	kc, err := client.New(cfg, client.Options{
@@ -53,7 +60,7 @@ func NewClient() (versioned.Interface, client.Client, error) {
 		//	AllowDuplicateLogs: false,
 		//},
 	})
-	return rmc, kc, err
+	return cfg, rmc, kc, err
 }
 
 func main() {
@@ -64,10 +71,24 @@ func main() {
 
 func useKubebuilderClient() error {
 	fmt.Println("Using kubebuilder client")
-	rmc, kc, err := NewClient()
+	cfg, rmc, kc, err := NewClient()
 	if err != nil {
 		return err
 	}
+
+	pcfg, err := SetupClusterForPrometheus(cfg, kc, rmc, types.NamespacedName{
+		Namespace: "cattle-monitoring-system",
+		Name:      "rancher-monitoring-prometheus",
+	})
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(pcfg)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	os.Exit(1)
 
 	svc, err := FindServiceForPrometheus(rmc, types.NamespacedName{
 		Namespace: "cattle-monitoring-system",
@@ -88,7 +109,7 @@ func useKubebuilderClient() error {
 	if err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(projects)
+	data, err = yaml.Marshal(projects)
 	if err != nil {
 		return err
 	}
@@ -289,4 +310,218 @@ func FindServiceForPrometheus(rmc versioned.Interface, key types.NamespacedName)
 		Group:    "",
 		Resource: "services",
 	}, key.String())
+}
+
+type PrometheusConfig struct {
+	Default     bool        `json:"default"`
+	URL         string      `json:"url"`
+	Service     ServiceSpec `json:"service"`
+	BasicAuth   BasicAuth   `json:"basicAuth"`
+	BearerToken string      `json:"bearerToken"`
+	TLS         TLSConfig   `json:"tls"`
+}
+
+type ServiceSpec struct {
+	Scheme    string `json:"scheme"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Port      string `json:"port"`
+	Path      string `json:"path"`
+	Query     string `json:"query"`
+}
+
+type BasicAuth struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type TLSConfig struct {
+	Ca                    string `json:"ca"`
+	Cert                  string `json:"cert"`
+	Key                   string `json:"key"`
+	ServerName            string `json:"serverName"`
+	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
+}
+
+const saTrickster = "trickster"
+
+func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*PrometheusConfig, error) {
+	var prom unstructured.Unstructured
+	prom.SetAPIVersion("monitoring.coreos.com/v1")
+	prom.SetKind("Prometheus")
+	err := kc.Get(context.TODO(), key, &prom)
+	if err != nil {
+		return nil, err
+	}
+
+	svc, err := FindServiceForPrometheus(rmc, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// https://github.com/bytebuilders/installer/blob/master/charts/monitoring-config/templates/trickster/trickster.yaml
+	sa := core.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saTrickster,
+			Namespace: key.Namespace,
+		},
+	}
+	savt, err := cu.CreateOrPatch(context.TODO(), kc, &sa, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*core.ServiceAccount)
+		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
+			Group:   "monitoring.coreos.com",
+			Version: "v1",
+			Kind:    "Prometheus",
+		})
+		obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+		return obj
+	})
+	if err != nil {
+		return nil, err
+	}
+	klog.Infof("%s service account %s/%s", savt, sa.Namespace, sa.Name)
+
+	secret := core.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saTrickster,
+			Namespace: key.Namespace,
+		},
+	}
+	secretvt, err := cu.CreateOrPatch(context.TODO(), kc, &secret, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*core.Secret)
+		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
+			Group:   "",
+			Version: "v1",
+			Kind:    "ServiceAccount",
+		})
+		obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+		obj.Type = core.SecretTypeServiceAccountToken
+		if obj.Annotations == nil {
+			obj.Annotations = make(map[string]string)
+		}
+		obj.Annotations[core.ServiceAccountNameKey] = sa.Name
+		obj.Annotations[core.ServiceAccountUIDKey] = string(sa.UID)
+
+		return obj
+	})
+	if err != nil {
+		return nil, err
+	}
+	klog.Infof("%s secret %s/%s", secretvt, secret.Namespace, secret.Name)
+
+	role := rbac.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saTrickster,
+			Namespace: key.Namespace,
+		},
+	}
+	rolevt, err := cu.CreateOrPatch(context.TODO(), kc, &role, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*rbac.Role)
+		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
+			Group:   "monitoring.coreos.com",
+			Version: "v1",
+			Kind:    "Prometheus",
+		})
+		obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+		obj.Rules = []rbac.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services/proxy"},
+				Verbs:     []string{"*"},
+			},
+		}
+
+		return obj
+	})
+	if err != nil {
+		return nil, err
+	}
+	klog.Infof("%s role %s/%s", rolevt, role.Namespace, role.Name)
+
+	rb := rbac.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saTrickster,
+			Namespace: key.Namespace,
+		},
+	}
+	rbvt, err := cu.CreateOrPatch(context.TODO(), kc, &rb, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*rbac.RoleBinding)
+		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
+			Group:   rbac.GroupName,
+			Version: "v1",
+			Kind:    "Role",
+		})
+		obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+		obj.RoleRef = rbac.RoleRef{
+			APIGroup: rbac.GroupName,
+			Kind:     "Role",
+			Name:     role.Name,
+		}
+
+		obj.Subjects = []rbac.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      sa.Name,
+				Namespace: sa.Namespace,
+			},
+		}
+
+		return obj
+	})
+	if err != nil {
+		return nil, err
+	}
+	klog.Infof("%s role binding %s/%s", rbvt, rb.Namespace, rb.Name)
+
+	var caData, tokenData []byte
+	err = wait.PollImmediate(kutil.RetryInterval, kutil.ReadinessTimeout, func() (done bool, err error) {
+		var s core.Secret
+		err = kc.Get(context.TODO(), client.ObjectKeyFromObject(&secret), &s)
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+
+		var caFound, tokenFound bool
+		caData, caFound = s.Data["ca.crt"]
+		tokenData, tokenFound = s.Data["token"]
+		return caFound && tokenFound, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// http-web
+
+	var pcfg PrometheusConfig
+	pcfg.Service = ServiceSpec{
+		Scheme:    "http",
+		Name:      svc.Name,
+		Namespace: svc.Namespace,
+		Port:      "",
+		Path:      "",
+		Query:     "",
+	}
+	for _, p := range svc.Spec.Ports {
+		if p.Name == "http-web" {
+			pcfg.Service.Port = fmt.Sprintf("%d", p.Port)
+		}
+	}
+	pcfg.URL = fmt.Sprintf("%s/api/v1/namespaces/%s/services/%s:%s:%s/proxy/", cfg.Host, pcfg.Service.Namespace, pcfg.Service.Scheme, pcfg.Service.Name, pcfg.Service.Port)
+	// remove basic auth and client cert auth
+	pcfg.BasicAuth = BasicAuth{}
+	pcfg.TLS.Cert = ""
+	pcfg.TLS.Key = ""
+	pcfg.BearerToken = string(tokenData)
+	pcfg.TLS.Ca = string(caData)
+
+	return &pcfg, nil
 }

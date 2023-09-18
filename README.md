@@ -20,6 +20,18 @@
 
 - https://ranchermanager.docs.rancher.com/how-to-guides/advanced-user-guides/monitoring-alerting-guides/prometheus-federator-guides/enable-prometheus-federator
 
+## Resource Quota
+
+Annotation on Project in the app cluster
+
+```
+metadata:
+  annotations:
+    MEMORY_LIMIT_GB: '32'
+    STORAGE_LIMIT_GB: '200'
+    TCP_PORT_RANGE: 50000-50014
+```
+
 ## Trickster
 
 {uid}-{cluster-uid}

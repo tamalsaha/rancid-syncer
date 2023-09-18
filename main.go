@@ -195,3 +195,33 @@ func GetRancherProject(kc client.Client, name string) (*v1alpha1.Project, error)
 
 	return &project, nil
 }
+
+/*
+apiVersion: meta.k8s.appscode.com/v1alpha1
+kind: ResourceQuery
+request:
+  outputFormat: Ref
+  source:
+    name: rancher-monitoring-prometheus
+    namespace: cattle-monitoring-system
+    resource:
+      group: monitoring.coreos.com
+      kind: Prometheus
+      version: v1
+  target:
+    query:
+      byLabel: exposed_by
+      type: GraphQL
+    ref:
+      group: ""
+      kind: Service
+response:
+- name: prometheus-operated
+  namespace: cattle-monitoring-system
+- name: rancher-monitoring-prometheus
+  namespace: cattle-monitoring-system
+*/
+
+func FindServiceForPrometheus(key client.ObjectKey) (*core.Service, error) {
+
+}

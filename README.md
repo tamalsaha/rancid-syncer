@@ -19,3 +19,17 @@
 - https://ranchermanager.docs.rancher.com/how-to-guides/advanced-user-guides/monitoring-alerting-guides/enable-monitoring#install-the-monitoring-application
 
 - https://ranchermanager.docs.rancher.com/how-to-guides/advanced-user-guides/monitoring-alerting-guides/prometheus-federator-guides/enable-prometheus-federator
+
+## Trickster
+
+{uid}-{cluster-uid}
+|
+|
+V
+{uid}.{cluster-uid}.{projctId}
+
+/register/
+
+/{uid}-{cluster-uid}/
+
+Data Source {cluster-name}-{projctId}

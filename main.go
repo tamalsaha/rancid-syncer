@@ -400,10 +400,16 @@ type TLSConfig struct {
 const saTrickster = "trickster"
 
 func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*PrometheusConfig, error) {
-	var prom unstructured.Unstructured
-	prom.SetAPIVersion(monitoringv1.SchemeGroupVersion.String())
-	prom.SetKind("Prometheus")
+	cm := DetectClusterManager(kc)
+
+	var prom monitoringv1.Prometheus
 	err := kc.Get(context.TODO(), key, &prom)
+	if err != nil {
+		return nil, err
+	}
+
+	key = client.ObjectKeyFromObject(&prom)
+	isDefault, err := IsDefault(kc, cm, key)
 	if err != nil {
 		return nil, err
 	}
@@ -502,6 +508,11 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	}
 	klog.Infof("%s role binding %s/%s", rbvt, rb.Namespace, rb.Name)
 
+	err = CreatePreset(kc, cm, &prom, isDefault)
+	if err != nil {
+		return nil, err
+	}
+
 	var caData, tokenData []byte
 	err = wait.PollImmediate(kutil.RetryInterval, kutil.ReadinessTimeout, func() (done bool, err error) {
 		var sacc core.ServiceAccount
@@ -564,6 +575,21 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	pcfg.TLS.Ca = string(caData)
 
 	return &pcfg, nil
+}
+
+func IsDefault(kc client.Client, cm ClusterManager, key types.NamespacedName) (bool, error) {
+	switch cm {
+	case ManagedByRancher:
+		return IsRancherSystemResource(kc, key)
+	case ManagedByACE:
+		gvk := schema.GroupVersionKind{
+			Group:   monitoring.GroupName,
+			Version: monitoringv1.Version,
+			Kind:    "Prometheus",
+		}
+		return IsSingletonResource(kc, gvk, key)
+	}
+	return false, nil
 }
 
 func IsRancherSystemResource(kc client.Client, key types.NamespacedName) (bool, error) {
@@ -644,25 +670,15 @@ var defaultPresetsLabels = map[string]string{
 	"charts.x-helm.dev/is-default-preset": "true",
 }
 
-func CreatePreset(kc client.Client, cm ClusterManager, p *monitoringv1.Prometheus) error {
+func CreatePreset(kc client.Client, cm ClusterManager, p *monitoringv1.Prometheus, isDefault bool) error {
 	presets := GeneratePresetForPrometheus(*p)
 	presetBytes, err := json.Marshal(presets)
 	if err != nil {
 		return err
 	}
 
-	gvk := schema.GroupVersionKind{
-		Group:   monitoring.GroupName,
-		Version: monitoringv1.Version,
-		Kind:    "Prometheus",
-	}
-
 	switch cm {
 	case ManagedByRancher:
-		isDefault, err := IsRancherSystemResource(kc, client.ObjectKeyFromObject(p))
-		if err != nil {
-			return err
-		}
 		if isDefault {
 			// create ClusterChartPreset
 			err := CreateClusterPreset(kc, presetBytes)
@@ -677,14 +693,6 @@ func CreatePreset(kc client.Client, cm ClusterManager, p *monitoringv1.Prometheu
 			}
 		}
 	case ManagedByACE:
-		only, err := IsSingletonResource(kc, gvk, client.ObjectKeyFromObject(p))
-		if err != nil {
-			return err
-		}
-		if !only {
-			return fmt.Errorf("multiple Prometheus found in this cluster")
-		}
-
 		// create ClusterChartPreset
 		err = CreateClusterPreset(kc, presetBytes)
 		if err != nil {

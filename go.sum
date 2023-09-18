@@ -827,6 +827,8 @@ k8s.io/utils v0.0.0-20221012122500-cfd413dd9e85 h1:cTdVh7LYu82xeClmfzGtgyspNh6Ux
 k8s.io/utils v0.0.0-20221012122500-cfd413dd9e85/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
 kmodules.xyz/client-go v0.25.33 h1:i5E88wDXFbR3ljoHCuIdjLR6Uobcb0Xc06i3UXIXJ9s=
 kmodules.xyz/client-go v0.25.33/go.mod h1:r/Va2Y6t1G8X1sPRjrQC6FWB3oh/i6rjssmlfJnbCmg=
+kmodules.xyz/custom-resources v0.25.2 h1:+PJgUZvbbSgyNT7EX9gUZ3PIzY2LAW03TDW8cevvXqo=
+kmodules.xyz/custom-resources v0.25.2/go.mod h1:b9XjjKQMZ6KrLHXKqQz7YwV3M3BK8Hwi4KEwu5RadCo=
 kmodules.xyz/offshoot-api v0.25.0 h1:Svq9da/+sg5afOjpgo9vx2J/Lu90Mo0aFxkdQmgKnGI=
 kmodules.xyz/offshoot-api v0.25.0/go.mod h1:ysEBn7LJuT3+s8ynAQA/OG0BSsJugXa6KGtDLMRjlKo=
 kmodules.xyz/resource-metadata v0.17.18-0.20230918100651-224b4abd8776 h1:0+dmTGiv+WQR8TjVEfYdl+i3YsZ71sXAeRYRD1WeqDs=

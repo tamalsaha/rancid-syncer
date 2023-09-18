@@ -24,6 +24,7 @@ import (
 	kutil "kmodules.xyz/client-go"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cu "kmodules.xyz/client-go/client"
+	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
@@ -510,4 +511,50 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	pcfg.TLS.Ca = string(caData)
 
 	return &pcfg, nil
+}
+
+func IsDefaultPrometheus(kc client.Client, gvk schema.GroupVersionKind, key types.NamespacedName) (bool, error) {
+	rancher, err := IsRancherManaged(kc)
+	if err != nil {
+		return false, err
+	}
+	if rancher {
+		if key.Namespace == metav1.NamespaceSystem {
+			return true, nil
+		}
+
+		var ns core.Namespace
+		err = kc.Get(context.TODO(), client.ObjectKey{Name: key.Namespace}, &ns)
+		if err != nil {
+			return false, err
+		}
+		projectId, exists := ns.Labels[labelKeyRancherProjectId]
+		if !exists {
+			return false, nil
+		}
+
+		var sysNS core.Namespace
+		err = kc.Get(context.TODO(), client.ObjectKey{Name: metav1.NamespaceSystem}, &sysNS)
+		if err != nil {
+			return false, err
+		}
+
+		sysProjectId, exists := ns.Labels[labelKeyRancherProjectId]
+		if !exists {
+			return false, nil
+		}
+		return projectId == sysProjectId, nil
+	}
+
+	var list unstructured.UnstructuredList
+	list.SetGroupVersionKind(gvk)
+	err = kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
+	if err != nil {
+		return false, err
+	}
+	return len(list.Items) == 1, nil
+}
+
+func HandleDefaultPrometheus(kc client.Client, gvk schema.GroupVersionKind, key types.NamespacedName) ([]appcatalog.AppBinding, error) {
+
 }

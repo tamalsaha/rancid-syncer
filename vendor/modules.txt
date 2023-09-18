@@ -653,6 +653,11 @@ kmodules.xyz/client-go/client
 kmodules.xyz/client-go/client/apiutil
 kmodules.xyz/client-go/meta
 kmodules.xyz/client-go/tools/clusterid
+# kmodules.xyz/custom-resources v0.25.2
+## explicit; go 1.18
+kmodules.xyz/custom-resources/apis/appcatalog
+kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1
+kmodules.xyz/custom-resources/crds
 # kmodules.xyz/offshoot-api v0.25.0
 ## explicit; go 1.18
 kmodules.xyz/offshoot-api/api/v1

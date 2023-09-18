@@ -382,35 +382,6 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	}
 	klog.Infof("%s service account %s/%s", savt, sa.Namespace, sa.Name)
 
-	secret := core.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      saTrickster,
-			Namespace: key.Namespace,
-		},
-	}
-	secretvt, err := cu.CreateOrPatch(context.TODO(), kc, &secret, func(in client.Object, createOp bool) client.Object {
-		obj := in.(*core.Secret)
-		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
-			Group:   "",
-			Version: "v1",
-			Kind:    "ServiceAccount",
-		})
-		obj.OwnerReferences = []metav1.OwnerReference{*ref}
-
-		obj.Type = core.SecretTypeServiceAccountToken
-		if obj.Annotations == nil {
-			obj.Annotations = make(map[string]string)
-		}
-		obj.Annotations[core.ServiceAccountNameKey] = sa.Name
-		obj.Annotations[core.ServiceAccountUIDKey] = string(sa.UID)
-
-		return obj
-	})
-	if err != nil {
-		return nil, err
-	}
-	klog.Infof("%s secret %s/%s", secretvt, secret.Namespace, secret.Name)
-
 	role := rbac.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      saTrickster,
@@ -479,8 +450,23 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 
 	var caData, tokenData []byte
 	err = wait.PollImmediate(kutil.RetryInterval, kutil.ReadinessTimeout, func() (done bool, err error) {
+		var sacc core.ServiceAccount
+		err = kc.Get(context.TODO(), client.ObjectKeyFromObject(&sa), &sacc)
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		if len(sacc.Secrets) == 0 {
+			return false, nil
+		}
+
+		skey := client.ObjectKey{
+			Namespace: sa.Namespace,
+			Name:      sacc.Secrets[0].Name,
+		}
 		var s core.Secret
-		err = kc.Get(context.TODO(), client.ObjectKeyFromObject(&secret), &s)
+		err = kc.Get(context.TODO(), skey, &s)
 		if apierrors.IsNotFound(err) {
 			return false, nil
 		} else if err != nil {

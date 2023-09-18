@@ -905,3 +905,55 @@ func CreatePrometheusAppBinding(kc client.Client, p *monitoringv1.Prometheus, sv
 func RegisterPrometheus() error {
 	return nil
 }
+
+func CreateGrafanaAppBinding(kc client.Client, p *monitoringv1.Prometheus, svc *core.Service) (kutil.VerbType, error) {
+	ab := appcatalog.AppBinding{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default-prometheus",
+			Namespace: p.Namespace,
+		},
+	}
+
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &ab, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*appcatalog.AppBinding)
+
+		if obj.Annotations == nil {
+			obj.Annotations = make(map[string]string)
+		}
+		obj.Annotations["monitoring.appscode.com/is-default-prometheus"] = "true"
+
+		obj.Spec.Type = "Prometheus"
+		obj.Spec.AppRef = &kmapi.TypedObjectReference{
+			APIGroup:  monitoring.GroupName,
+			Kind:      "Prometheus",
+			Namespace: p.Namespace,
+			Name:      p.Name,
+		}
+		obj.Spec.ClientConfig = appcatalog.ClientConfig{
+			// URL:                   nil,
+			Service: &appcatalog.ServiceReference{
+				Scheme:    "http",
+				Namespace: svc.Namespace,
+				Name:      svc.Name,
+				Port:      0,
+				Path:      "",
+				Query:     "",
+			},
+			//InsecureSkipTLSVerify: false,
+			//CABundle:              nil,
+			//ServerName:            "",
+		}
+		for _, p := range svc.Spec.Ports {
+			if p.Name == portPrometheus {
+				obj.Spec.ClientConfig.Service.Port = p.Port
+			}
+		}
+
+		return obj
+	})
+	if err == nil {
+		klog.Infof("%s AppBinding %s/%s", vt, ab.Namespace, ab.Name)
+	}
+	return vt, err
+}

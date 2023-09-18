@@ -11,15 +11,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2/klogr"
+	kmapi "kmodules.xyz/client-go/api/v1"
+	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
+	"kmodules.xyz/resource-metadata/apis/shared"
+	"kmodules.xyz/resource-metadata/client/clientset/versioned"
+	_ "kmodules.xyz/resource-metadata/client/clientset/versioned"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
 )
 
-func NewClient() (client.Client, error) {
+func NewClient() (versioned.Interface, client.Client, error) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 
@@ -28,12 +36,17 @@ func NewClient() (client.Client, error) {
 	cfg.QPS = 100
 	cfg.Burst = 100
 
-	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
+	rmc, err := versioned.NewForConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return client.New(cfg, client.Options{
+	mapper, err := apiutil.NewDynamicRESTMapper(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	kc, err := client.New(cfg, client.Options{
 		Scheme: scheme,
 		Mapper: mapper,
 		//Opts: client.WarningHandlerOptions{
@@ -41,6 +54,7 @@ func NewClient() (client.Client, error) {
 		//	AllowDuplicateLogs: false,
 		//},
 	})
+	return rmc, kc, err
 }
 
 func main() {
@@ -51,10 +65,19 @@ func main() {
 
 func useKubebuilderClient() error {
 	fmt.Println("Using kubebuilder client")
-	kc, err := NewClient()
+	rmc, kc, err := NewClient()
 	if err != nil {
 		return err
 	}
+
+	svc, err := FindServiceForPrometheus(rmc, types.NamespacedName{
+		Namespace: "cattle-monitoring-system",
+		Name:      "rancher-monitoring-prometheus",
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println(svc.Name)
 
 	rancher, err := IsRancherManaged(kc)
 	if err != nil {
@@ -222,6 +245,49 @@ response:
   namespace: cattle-monitoring-system
 */
 
-func FindServiceForPrometheus(key client.ObjectKey) (*core.Service, error) {
-
+func FindServiceForPrometheus(rmc versioned.Interface, key types.NamespacedName) (*core.Service, error) {
+	q := &rsapi.ResourceQuery{
+		Request: &rsapi.ResourceQueryRequest{
+			Source: rsapi.SourceInfo{
+				Resource: kmapi.ResourceID{
+					Group:   "monitoring.coreos.com",
+					Version: "v1",
+					Kind:    "Prometheus",
+				},
+				Namespace: key.Namespace,
+				Name:      key.Name,
+			},
+			Target: &shared.ResourceLocator{
+				Ref: metav1.GroupKind{
+					Group: "",
+					Kind:  "Service",
+				},
+				Query: shared.ResourceQuery{
+					Type:    shared.GraphQLQuery,
+					ByLabel: kmapi.EdgeLabelExposedBy,
+				},
+			},
+			OutputFormat: rsapi.OutputFormatObject,
+		},
+		Response: nil,
+	}
+	var err error
+	q, err = rmc.MetaV1alpha1().ResourceQueries().Create(context.TODO(), q, metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var list core.ServiceList
+	err = json.Unmarshal(q.Response.Raw, &list)
+	if err != nil {
+		return nil, err
+	}
+	for _, svc := range list.Items {
+		if svc.Spec.ClusterIP != "None" {
+			return &svc, nil
+		}
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{
+		Group:    "",
+		Resource: "services",
+	}, key.String())
 }

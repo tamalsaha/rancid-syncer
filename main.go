@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/tamalsaha/rancid-syncer/api/management/v1alpha1"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
@@ -271,8 +273,8 @@ func FindServiceForPrometheus(rmc versioned.Interface, key types.NamespacedName)
 		Request: &rsapi.ResourceQueryRequest{
 			Source: rsapi.SourceInfo{
 				Resource: kmapi.ResourceID{
-					Group:   "monitoring.coreos.com",
-					Version: "v1",
+					Group:   monitoring.GroupName,
+					Version: monitoringv1.Version,
 					Kind:    "Prometheus",
 				},
 				Namespace: key.Namespace,
@@ -348,7 +350,7 @@ const saTrickster = "trickster"
 
 func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*PrometheusConfig, error) {
 	var prom unstructured.Unstructured
-	prom.SetAPIVersion("monitoring.coreos.com/v1")
+	prom.SetAPIVersion(monitoringv1.SchemeGroupVersion.String())
 	prom.SetKind("Prometheus")
 	err := kc.Get(context.TODO(), key, &prom)
 	if err != nil {
@@ -370,8 +372,8 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	savt, err := cu.CreateOrPatch(context.TODO(), kc, &sa, func(in client.Object, createOp bool) client.Object {
 		obj := in.(*core.ServiceAccount)
 		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
-			Group:   "monitoring.coreos.com",
-			Version: "v1",
+			Group:   monitoring.GroupName,
+			Version: monitoringv1.Version,
 			Kind:    "Prometheus",
 		})
 		obj.OwnerReferences = []metav1.OwnerReference{*ref}
@@ -392,8 +394,8 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	rolevt, err := cu.CreateOrPatch(context.TODO(), kc, &role, func(in client.Object, createOp bool) client.Object {
 		obj := in.(*rbac.Role)
 		ref := metav1.NewControllerRef(&prom, schema.GroupVersionKind{
-			Group:   "monitoring.coreos.com",
-			Version: "v1",
+			Group:   monitoring.GroupName,
+			Version: monitoringv1.Version,
 			Kind:    "Prometheus",
 		})
 		obj.OwnerReferences = []metav1.OwnerReference{*ref}
@@ -555,6 +557,20 @@ func IsDefaultPrometheus(kc client.Client, gvk schema.GroupVersionKind, key type
 	return len(list.Items) == 1, nil
 }
 
-func HandleDefaultPrometheus(kc client.Client, gvk schema.GroupVersionKind, key types.NamespacedName) ([]appcatalog.AppBinding, error) {
+func HandleDefaultPrometheus(kc client.Client, key types.NamespacedName) ([]appcatalog.AppBinding, error) {
+	gvk := schema.GroupVersionKind{
+		Group:   monitoring.GroupName,
+		Version: monitoringv1.Version,
+		Kind:    "Prometheus",
+	}
+	isdefault, err := IsDefaultPrometheus(kc, gvk, key)
+	if !isdefault || err != nil {
+		return nil, err
+	}
 
+	// create Prometheus AppBinding
+
+	// create Grafana AppBinding
+
+	return nil, nil
 }

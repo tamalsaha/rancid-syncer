@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/onsi/ginkgo/v2 v2.1.6
 	github.com/onsi/gomega v1.20.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.59.1
 	k8s.io/api v0.25.3
 	k8s.io/apimachinery v0.25.3
 	k8s.io/client-go v0.25.3

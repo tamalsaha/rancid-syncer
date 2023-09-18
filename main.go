@@ -9,7 +9,6 @@ import (
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/tamalsaha/rancid-syncer/api/management/v1alpha1"
-	alertsv1alpha1 "go.appscode.dev/alerts/apis/alerts/v1alpha1"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -366,43 +365,12 @@ func FindServiceForPrometheus(rmc versioned.Interface, key types.NamespacedName)
 	}, key.String())
 }
 
-type PrometheusConfig struct {
-	Default     bool        `json:"default"`
-	URL         string      `json:"url"`
-	Service     ServiceSpec `json:"service"`
-	BasicAuth   BasicAuth   `json:"basicAuth"`
-	BearerToken string      `json:"bearerToken"`
-	TLS         TLSConfig   `json:"tls"`
-}
-
-type ServiceSpec struct {
-	Scheme    string `json:"scheme"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Port      string `json:"port"`
-	Path      string `json:"path"`
-	Query     string `json:"query"`
-}
-
-type BasicAuth struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type TLSConfig struct {
-	Ca                    string `json:"ca"`
-	Cert                  string `json:"cert"`
-	Key                   string `json:"key"`
-	ServerName            string `json:"serverName"`
-	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
-}
-
 const (
 	portPrometheus = "http-web"
 	saTrickster    = "trickster"
 )
 
-func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*PrometheusConfig, error) {
+func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*mona.PrometheusConfig, error) {
 	cm := DetectClusterManager(kc)
 
 	var prom monitoringv1.Prometheus
@@ -566,8 +534,8 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 		return nil, err
 	}
 
-	var pcfg PrometheusConfig
-	pcfg.Service = ServiceSpec{
+	var pcfg mona.PrometheusConfig
+	pcfg.Service = mona.ServiceSpec{
 		Scheme:    "http",
 		Name:      svc.Name,
 		Namespace: svc.Namespace,
@@ -582,7 +550,7 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	}
 	pcfg.URL = fmt.Sprintf("%s/api/v1/namespaces/%s/services/%s:%s:%s/proxy/", cfg.Host, pcfg.Service.Namespace, pcfg.Service.Scheme, pcfg.Service.Name, pcfg.Service.Port)
 	// remove basic auth and client cert auth
-	pcfg.BasicAuth = BasicAuth{}
+	pcfg.BasicAuth = mona.BasicAuth{}
 	pcfg.TLS.Cert = ""
 	pcfg.TLS.Key = ""
 	pcfg.BearerToken = string(tokenData)
@@ -754,37 +722,8 @@ func CreateProjectPreset(kc client.Client, p *monitoringv1.Prometheus, presetByt
 	return nil
 }
 
-type MonitoringPresets struct {
-	Spec MonitoringPresetsSpec `json:"spec,omitempty"`
-	Form MonitoringPresetsForm `json:"form,omitempty"`
-}
-
-type MonitoringPresetsSpec struct {
-	Monitoring ServiceMonitorPreset `json:"monitoring"`
-}
-
-type ServiceMonitorPreset struct {
-	Agent          string               `json:"agent"`
-	ServiceMonitor ServiceMonitorLabels `json:"serviceMonitor"`
-}
-
-type ServiceMonitorLabels struct {
-	// +optional
-	Labels map[string]string `json:"labels"`
-}
-
-type MonitoringPresetsForm struct {
-	Alert AlertPreset `json:"alert"`
-}
-
-type AlertPreset struct {
-	Enabled alertsv1alpha1.SeverityFlag `json:"enabled"`
-	// +optional
-	Labels map[string]string `json:"labels"`
-}
-
-func GeneratePresetForPrometheus(p monitoringv1.Prometheus) MonitoringPresets {
-	var preset MonitoringPresets
+func GeneratePresetForPrometheus(p monitoringv1.Prometheus) mona.MonitoringPresets {
+	var preset mona.MonitoringPresets
 
 	preset.Spec.Monitoring.Agent = string(mona.AgentPrometheusOperator)
 	svcmonLabels, ok := LabelsForLabelSelector(p.Spec.ServiceMonitorSelector)
@@ -793,7 +732,7 @@ func GeneratePresetForPrometheus(p monitoringv1.Prometheus) MonitoringPresets {
 	}
 	preset.Spec.Monitoring.ServiceMonitor.Labels = svcmonLabels
 
-	preset.Form.Alert.Enabled = alertsv1alpha1.SeverityFlagCritical
+	preset.Form.Alert.Enabled = mona.SeverityFlagCritical
 	ruleLabels, ok := LabelsForLabelSelector(p.Spec.RuleSelector)
 	if !ok {
 		klog.Warningln("Prometheus %s/%s uses match expressions in RuleSelector", p.Namespace, p.Name)

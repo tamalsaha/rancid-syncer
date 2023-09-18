@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -27,7 +28,6 @@ import (
 	kutil "kmodules.xyz/client-go"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cu "kmodules.xyz/client-go/client"
-	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
@@ -397,7 +397,10 @@ type TLSConfig struct {
 	InsecureSkipTLSVerify bool   `json:"insecureSkipTLSVerify"`
 }
 
-const saTrickster = "trickster"
+const (
+	portPrometheus = "http-web"
+	saTrickster    = "trickster"
+)
 
 func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*PrometheusConfig, error) {
 	cm := DetectClusterManager(kc)
@@ -513,6 +516,19 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 		return nil, err
 	}
 
+	if isDefault {
+		// create Prometheus AppBinding
+		vt, err := CreatePrometheusAppBinding(kc, &prom, svc)
+		if err != nil {
+			return nil, err
+		}
+		if vt == kutil.VerbCreated {
+			RegisterPrometheus()
+		}
+
+		// create Grafana AppBinding
+	}
+
 	var caData, tokenData []byte
 	err = wait.PollImmediate(kutil.RetryInterval, kutil.ReadinessTimeout, func() (done bool, err error) {
 		var sacc core.ServiceAccount
@@ -550,8 +566,6 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 		return nil, err
 	}
 
-	// http-web
-
 	var pcfg PrometheusConfig
 	pcfg.Service = ServiceSpec{
 		Scheme:    "http",
@@ -562,7 +576,7 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 		Query:     "",
 	}
 	for _, p := range svc.Spec.Ports {
-		if p.Name == "http-web" {
+		if p.Name == portPrometheus {
 			pcfg.Service.Port = fmt.Sprintf("%d", p.Port)
 		}
 	}
@@ -632,24 +646,6 @@ func IsSingletonResource(kc client.Client, gvk schema.GroupVersionKind, key type
 		return false, err
 	}
 	return len(list.Items) == 1, nil
-}
-
-func HandleDefaultPrometheus(kc client.Client, key types.NamespacedName) ([]appcatalog.AppBinding, error) {
-	gvk := schema.GroupVersionKind{
-		Group:   monitoring.GroupName,
-		Version: monitoringv1.Version,
-		Kind:    "Prometheus",
-	}
-	isDefault, err := IsRancherSystemResource(kc, key)
-	if !isDefault || err != nil {
-		return nil, err
-	}
-
-	// create Prometheus AppBinding
-
-	// create Grafana AppBinding
-
-	return nil, nil
 }
 
 type ClusterManager string
@@ -852,4 +848,60 @@ func FindSiblingAlertManagerForPrometheus(kc client.Client, key types.Namespaced
 		return nil, nil
 	}
 	return &list.Items[0], nil
+}
+
+func CreatePrometheusAppBinding(kc client.Client, p *monitoringv1.Prometheus, svc *core.Service) (kutil.VerbType, error) {
+	ab := appcatalog.AppBinding{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default-prometheus",
+			Namespace: p.Namespace,
+		},
+	}
+
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &ab, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*appcatalog.AppBinding)
+
+		if obj.Annotations == nil {
+			obj.Annotations = make(map[string]string)
+		}
+		obj.Annotations["monitoring.appscode.com/is-default-prometheus"] = "true"
+
+		obj.Spec.Type = "Prometheus"
+		obj.Spec.AppRef = &kmapi.TypedObjectReference{
+			APIGroup:  monitoring.GroupName,
+			Kind:      "Prometheus",
+			Namespace: p.Namespace,
+			Name:      p.Name,
+		}
+		obj.Spec.ClientConfig = appcatalog.ClientConfig{
+			// URL:                   nil,
+			Service: &appcatalog.ServiceReference{
+				Scheme:    "http",
+				Namespace: svc.Namespace,
+				Name:      svc.Name,
+				Port:      0,
+				Path:      "",
+				Query:     "",
+			},
+			//InsecureSkipTLSVerify: false,
+			//CABundle:              nil,
+			//ServerName:            "",
+		}
+		for _, p := range svc.Spec.Ports {
+			if p.Name == portPrometheus {
+				obj.Spec.ClientConfig.Service.Port = p.Port
+			}
+		}
+
+		return obj
+	})
+	if err == nil {
+		klog.Infof("%s AppBinding %s/%s", vt, ab.Namespace, ab.Name)
+	}
+	return vt, err
+}
+
+func RegisterPrometheus() error {
+	return nil
 }

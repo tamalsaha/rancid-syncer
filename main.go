@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gomodules.xyz/pointer"
 	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
@@ -845,54 +846,75 @@ func RegisterPrometheus() error {
 	return nil
 }
 
-func CreateGrafanaAppBinding(kc client.Client, p *monitoringv1.Prometheus, svc *core.Service) (kutil.VerbType, error) {
+func CreateGrafanaAppBinding(kc client.Client, key types.NamespacedName, config mona.GrafanaConfig) (kutil.VerbType, error) {
 	ab := appcatalog.AppBinding{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "default-prometheus",
-			Namespace: p.Namespace,
+			Name:      "default-grafana",
+			Namespace: key.Namespace,
 		},
 	}
 
-	vt, err := cu.CreateOrPatch(context.TODO(), kc, &ab, func(in client.Object, createOp bool) client.Object {
+	abvt, err := cu.CreateOrPatch(context.TODO(), kc, &ab, func(in client.Object, createOp bool) client.Object {
 		obj := in.(*appcatalog.AppBinding)
 
 		if obj.Annotations == nil {
 			obj.Annotations = make(map[string]string)
 		}
-		obj.Annotations["monitoring.appscode.com/is-default-prometheus"] = "true"
+		obj.Annotations["monitoring.appscode.com/is-default-grafana"] = "true"
 
-		obj.Spec.Type = "Prometheus"
-		obj.Spec.AppRef = &kmapi.TypedObjectReference{
-			APIGroup:  monitoring.GroupName,
-			Kind:      "Prometheus",
-			Namespace: p.Namespace,
-			Name:      p.Name,
-		}
+		obj.Spec.Type = "Grafana"
+		obj.Spec.AppRef = nil
 		obj.Spec.ClientConfig = appcatalog.ClientConfig{
-			// URL:                   nil,
-			Service: &appcatalog.ServiceReference{
-				Scheme:    "http",
-				Namespace: svc.Namespace,
-				Name:      svc.Name,
-				Port:      0,
-				Path:      "",
-				Query:     "",
-			},
+			URL: pointer.StringP(config.URL),
+			//Service: &appcatalog.ServiceReference{
+			//	Scheme:    "http",
+			//	Namespace: svc.Namespace,
+			//	Name:      svc.Name,
+			//	Port:      0,
+			//	Path:      "",
+			//	Query:     "",
+			//},
 			//InsecureSkipTLSVerify: false,
 			//CABundle:              nil,
 			//ServerName:            "",
 		}
-		for _, p := range svc.Spec.Ports {
-			if p.Name == portPrometheus {
-				obj.Spec.ClientConfig.Service.Port = p.Port
-			}
+		obj.Spec.Secret = &core.LocalObjectReference{
+			Name: ab.Name + "-auth",
 		}
 
 		return obj
 	})
 	if err == nil {
-		klog.Infof("%s AppBinding %s/%s", vt, ab.Namespace, ab.Name)
+		klog.Infof("%s AppBinding %s/%s", abvt, ab.Namespace, ab.Name)
+
+		authSecret := core.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ab.Name + "-auth",
+				Namespace: key.Namespace,
+			},
+		}
+
+		svt, e2 := cu.CreateOrPatch(context.TODO(), kc, &authSecret, func(in client.Object, createOp bool) client.Object {
+			obj := in.(*core.Secret)
+
+			ref := metav1.NewControllerRef(&ab, schema.GroupVersionKind{
+				Group:   appcatalog.SchemeGroupVersion.Group,
+				Version: appcatalog.SchemeGroupVersion.Version,
+				Kind:    "AppBinding",
+			})
+			obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+			obj.StringData = map[string]string{
+				"token": config.BearerToken,
+			}
+
+			return obj
+		})
+		if e2 == nil {
+			klog.Infof("%s Grafana auth secret %s/%s", svt, authSecret.Namespace, authSecret.Name)
+		}
 	}
-	return vt, err
+
+	return abvt, err
 }

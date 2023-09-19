@@ -852,8 +852,8 @@ k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 h1:+70TFaan3hfJzs+7VK2o+O
 k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280/go.mod h1:+Axhij7bCpeqhklhUTe3xmOn6bWxolyZEeyaFpjGtl4=
 k8s.io/utils v0.0.0-20221101230645-61b03e2f6476 h1:L14f2LWkOxG2rYsuSA3ltQnnST1vMfek/GUk+VemxD4=
 k8s.io/utils v0.0.0-20221101230645-61b03e2f6476/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
-kmodules.xyz/client-go v0.25.34-0.20230919171221-025c830b8a4f h1:Ixipgn+ronQHsWnwWdMnxJwWSp2wgdrrgupxeih6dQI=
-kmodules.xyz/client-go v0.25.34-0.20230919171221-025c830b8a4f/go.mod h1:r/Va2Y6t1G8X1sPRjrQC6FWB3oh/i6rjssmlfJnbCmg=
+kmodules.xyz/client-go v0.25.34-0.20230919221845-bc1b6068f2e4 h1:nfIisEgJCVTYVl6ZWqZqOzSVSSkOB4IxjSbaHmHjK50=
+kmodules.xyz/client-go v0.25.34-0.20230919221845-bc1b6068f2e4/go.mod h1:r/Va2Y6t1G8X1sPRjrQC6FWB3oh/i6rjssmlfJnbCmg=
 kmodules.xyz/custom-resources v0.25.2 h1:+PJgUZvbbSgyNT7EX9gUZ3PIzY2LAW03TDW8cevvXqo=
 kmodules.xyz/custom-resources v0.25.2/go.mod h1:b9XjjKQMZ6KrLHXKqQz7YwV3M3BK8Hwi4KEwu5RadCo=
 kmodules.xyz/monitoring-agent-api v0.25.2 h1:duWK/+VAGv8LSQ1h5IEREKHNdokoBTXEx2ZmJAZ8PXo=

@@ -23,7 +23,6 @@ import (
 	"k8s.io/klog/v2/klogr"
 	kutil "kmodules.xyz/client-go"
 	kmapi "kmodules.xyz/client-go/api/v1"
-	managementv1alpha1 "kmodules.xyz/client-go/apis/management/v1alpha1"
 	cu "kmodules.xyz/client-go/client"
 	clustermanger "kmodules.xyz/client-go/cluster/manager"
 	meta_util "kmodules.xyz/client-go/meta"
@@ -375,7 +374,7 @@ var defaultPresetsLabels = map[string]string{
 	"charts.x-helm.dev/is-default-preset": "true",
 }
 
-func CreatePreset(kc client.Client, cm managementv1alpha1.ClusterManager, p *monitoringv1.Prometheus, isDefault bool) error {
+func CreatePreset(kc client.Client, cm kmapi.ClusterManager, p *monitoringv1.Prometheus, isDefault bool) error {
 	presets := GeneratePresetForPrometheus(*p)
 	presetBytes, err := json.Marshal(presets)
 	if err != nil {

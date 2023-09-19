@@ -2,18 +2,16 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	openvizapi "go.openviz.dev/apimachinery/apis/openviz/v1alpha1"
 
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	openvizapi "go.openviz.dev/apimachinery/apis/openviz/v1alpha1"
 	"gomodules.xyz/pointer"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +26,7 @@ import (
 	managementv1alpha1 "kmodules.xyz/client-go/apis/management/v1alpha1"
 	cu "kmodules.xyz/client-go/client"
 	clustermanger "kmodules.xyz/client-go/cluster/manager"
+	meta_util "kmodules.xyz/client-go/meta"
 	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
@@ -123,8 +122,6 @@ func useKubebuilderClient() error {
 	return nil
 }
 
-const labelKeyRancherProjectId = "field.cattle.io/projectId"
-
 func FindServiceForPrometheus(rmc versioned.Interface, key types.NamespacedName) (*core.Service, error) {
 	q := &rsapi.ResourceQuery{
 		Request: &rsapi.ResourceQueryRequest{
@@ -180,6 +177,12 @@ const (
 func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*mona.PrometheusConfig, error) {
 	cm := clustermanger.DetectClusterManager(kc)
 
+	gvk := schema.GroupVersionKind{
+		Group:   monitoring.GroupName,
+		Version: monitoringv1.Version,
+		Kind:    "Prometheus",
+	}
+
 	var prom monitoringv1.Prometheus
 	err := kc.Get(context.TODO(), key, &prom)
 	if err != nil {
@@ -187,7 +190,7 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	}
 
 	key = client.ObjectKeyFromObject(&prom)
-	isDefault, err := IsDefault(kc, cm, key)
+	isDefault, err := clustermanger.IsDefault(kc, cm, gvk, key)
 	if err != nil {
 		return nil, err
 	}
@@ -366,60 +369,6 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	return &pcfg, nil
 }
 
-func IsDefault(kc client.Client, cm managementv1alpha1.ClusterManager, key types.NamespacedName) (bool, error) {
-	if cm.ManagedByRancher() {
-		return IsRancherSystemResource(kc, key)
-	}
-	gvk := schema.GroupVersionKind{
-		Group:   monitoring.GroupName,
-		Version: monitoringv1.Version,
-		Kind:    "Prometheus",
-	}
-	return IsSingletonResource(kc, gvk, key)
-}
-
-func IsRancherSystemResource(kc client.Client, key types.NamespacedName) (bool, error) {
-	if !clustermanger.IsRancherManaged(kc.RESTMapper()) {
-		return false, errors.New("not a Rancher managed cluster")
-	}
-
-	if key.Namespace == metav1.NamespaceSystem {
-		return true, nil
-	}
-
-	var ns core.Namespace
-	err := kc.Get(context.TODO(), client.ObjectKey{Name: key.Namespace}, &ns)
-	if err != nil {
-		return false, err
-	}
-	projectId, exists := ns.Labels[labelKeyRancherProjectId]
-	if !exists {
-		return false, nil
-	}
-
-	var sysNS core.Namespace
-	err = kc.Get(context.TODO(), client.ObjectKey{Name: metav1.NamespaceSystem}, &sysNS)
-	if err != nil {
-		return false, err
-	}
-
-	sysProjectId, exists := ns.Labels[labelKeyRancherProjectId]
-	if !exists {
-		return false, nil
-	}
-	return projectId == sysProjectId, nil
-}
-
-func IsSingletonResource(kc client.Client, gvk schema.GroupVersionKind, key types.NamespacedName) (bool, error) {
-	var list unstructured.UnstructuredList
-	list.SetGroupVersionKind(gvk)
-	err := kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
-	if err != nil {
-		return false, err
-	}
-	return len(list.Items) == 1, nil
-}
-
 const presetsMonitoring = "monitoring-presets"
 
 var defaultPresetsLabels = map[string]string{
@@ -511,47 +460,20 @@ func GeneratePresetForPrometheus(p monitoringv1.Prometheus) mona.MonitoringPrese
 	var preset mona.MonitoringPresets
 
 	preset.Spec.Monitoring.Agent = string(mona.AgentPrometheusOperator)
-	svcmonLabels, ok := LabelsForLabelSelector(p.Spec.ServiceMonitorSelector)
+	svcmonLabels, ok := meta_util.LabelsForLabelSelector(p.Spec.ServiceMonitorSelector)
 	if !ok {
 		klog.Warningln("Prometheus %s/%s uses match expressions in ServiceMonitorSelector", p.Namespace, p.Name)
 	}
 	preset.Spec.Monitoring.ServiceMonitor.Labels = svcmonLabels
 
 	preset.Form.Alert.Enabled = mona.SeverityFlagCritical
-	ruleLabels, ok := LabelsForLabelSelector(p.Spec.RuleSelector)
+	ruleLabels, ok := meta_util.LabelsForLabelSelector(p.Spec.RuleSelector)
 	if !ok {
 		klog.Warningln("Prometheus %s/%s uses match expressions in RuleSelector", p.Namespace, p.Name)
 	}
 	preset.Form.Alert.Labels = ruleLabels
 
 	return preset
-}
-
-func LabelsForLabelSelector(sel *metav1.LabelSelector) (map[string]string, bool) {
-	if sel != nil {
-		if len(sel.MatchExpressions) > 0 {
-			expr := sel.MatchExpressions[0]
-			switch expr.Operator {
-			case metav1.LabelSelectorOpIn:
-				return map[string]string{
-					expr.Key: expr.Values[0],
-				}, false
-			case metav1.LabelSelectorOpNotIn:
-				return map[string]string{
-					expr.Key: "not-" + expr.Values[0],
-				}, false
-			case metav1.LabelSelectorOpExists:
-				return map[string]string{
-					expr.Key: "",
-				}, false
-			case metav1.LabelSelectorOpDoesNotExist:
-				return make(map[string]string), false
-			}
-		} else {
-			return sel.MatchLabels, true
-		}
-	}
-	return make(map[string]string), true
 }
 
 /*

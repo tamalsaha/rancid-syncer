@@ -6,14 +6,14 @@ require (
 	github.com/onsi/ginkgo/v2 v2.1.6
 	github.com/onsi/gomega v1.20.1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.59.1
-	go.appscode.dev/alerts v0.2.0
+	gomodules.xyz/pointer v0.1.0
 	k8s.io/api v0.25.3
 	k8s.io/apimachinery v0.25.3
 	k8s.io/client-go v0.25.3
 	k8s.io/klog/v2 v2.80.1
 	kmodules.xyz/client-go v0.25.33
 	kmodules.xyz/custom-resources v0.25.2
-	kmodules.xyz/monitoring-agent-api v0.25.2-0.20230918231314-3b781c31a890
+	kmodules.xyz/monitoring-agent-api v0.25.2-0.20230919004036-c0df0c1f7cbc
 	kmodules.xyz/resource-metadata v0.17.18-0.20230918100651-224b4abd8776
 	sigs.k8s.io/controller-runtime v0.13.1
 	sigs.k8s.io/yaml v1.3.0
@@ -93,7 +93,6 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	gomodules.xyz/jsonpath v0.0.2 // indirect
 	gomodules.xyz/mergo v0.3.13 // indirect
-	gomodules.xyz/pointer v0.1.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

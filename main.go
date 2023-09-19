@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	_ "go.openviz.dev/apimachinery/apis/openviz/v1alpha1"
 
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -664,6 +665,10 @@ func CreateGrafanaAppBinding(kc client.Client, key types.NamespacedName, config 
 		}
 		obj.Spec.Secret = &core.LocalObjectReference{
 			Name: ab.Name + "-auth",
+		}
+		obj.Spec.Parameters = &runtime.RawExtension{
+			Raw:    nil,
+			Object: nil,
 		}
 
 		return obj

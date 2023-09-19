@@ -4,16 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gomodules.xyz/pointer"
-	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"github.com/tamalsaha/rancid-syncer/api/management/v1alpha1"
+	"gomodules.xyz/pointer"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,7 +24,10 @@ import (
 	"k8s.io/klog/v2/klogr"
 	kutil "kmodules.xyz/client-go"
 	kmapi "kmodules.xyz/client-go/api/v1"
+	managementv1alpha1 "kmodules.xyz/client-go/apis/management/v1alpha1"
 	cu "kmodules.xyz/client-go/client"
+	clustermanger "kmodules.xyz/client-go/cluster/manager"
+	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
@@ -106,10 +106,10 @@ func useKubebuilderClient() error {
 	}
 	fmt.Println(svc.Name)
 
-	rancher := IsRancherManaged(kc.RESTMapper())
+	rancher := clustermanger.IsRancherManaged(kc.RESTMapper())
 	fmt.Println("IsRancherManaged", rancher)
 
-	projects, err := ListRancherProjects(kc)
+	projects, err := clustermanger.ListRancherProjects(kc)
 	if err != nil {
 		return err
 	}
@@ -122,202 +122,7 @@ func useKubebuilderClient() error {
 	return nil
 }
 
-/*
-> k get clusters.management.cattle.io local -o yaml
-
-apiVersion: management.cattle.io/v3
-kind: Cluster
-metadata:
-  annotations:
-    provisioner.cattle.io/encrypt-migrated: "true"
-  creationTimestamp: "2023-09-17T19:58:59Z"
-  generation: 2
-  name: local
-  resourceVersion: "1994"
-  uid: 920a0c9a-7f8a-46c7-8ad2-b97000e1a073
-*/
-
-func DetectClusterManager(kc client.Client) ClusterManager {
-	if IsOpenClusterManaged(kc.RESTMapper()) {
-		return ManagedByACE
-	}
-	if IsRancherManaged(kc.RESTMapper()) {
-		return ManagedByRancher
-	}
-	return ManagedByACE
-}
-
-func IsOpenClusterManaged(mapper meta.RESTMapper) bool {
-	if _, err := mapper.RESTMappings(schema.GroupKind{
-		Group: "cluster.open-cluster-management.io",
-		Kind:  "ManagedCluster",
-	}); err == nil {
-		return true
-	}
-	if _, err := mapper.RESTMappings(schema.GroupKind{
-		Group: "work.open-cluster-management.io",
-		Kind:  "AppliedManifestWork",
-	}); err == nil {
-		return true
-	}
-	return false
-}
-
-/*
-> k get clusters.management.cattle.io local -o yaml
-
-apiVersion: management.cattle.io/v3
-kind: Cluster
-metadata:
-  annotations:
-    provisioner.cattle.io/encrypt-migrated: "true"
-  creationTimestamp: "2023-09-17T19:58:59Z"
-  generation: 2
-  name: local
-  resourceVersion: "1994"
-  uid: 920a0c9a-7f8a-46c7-8ad2-b97000e1a073
-*/
-
-func IsRancherManaged(mapper meta.RESTMapper) bool {
-	if _, err := mapper.RESTMappings(schema.GroupKind{
-		Group: "management.cattle.io",
-		Kind:  "Cluster",
-	}); err == nil {
-		return true
-	}
-	return false
-}
-
-//	var obj unstructured.Unstructured
-//	obj.SetAPIVersion("management.cattle.io/v3")
-//	obj.SetKind("Cluster")
-//
-//	key := client.ObjectKey{
-//		Name: "local",
-//	}
-//	err := kc.Get(context.TODO(), key, &obj)
-//	if err == nil {
-//		return true, nil
-//	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
-//		return false, nil
-//	}
-//	return false, err
-//}
-
 const labelKeyRancherProjectId = "field.cattle.io/projectId"
-
-func ListRancherProjects(kc client.Client) ([]v1alpha1.Project, error) {
-	var list core.NamespaceList
-	err := kc.List(context.TODO(), &list)
-	if meta.IsNoMatchError(err) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	projects := map[string]v1alpha1.Project{}
-	for _, ns := range list.Items {
-		projectId, exists := ns.Labels[labelKeyRancherProjectId]
-		if !exists {
-			continue
-		}
-
-		project, exists := projects[projectId]
-		if !exists {
-			project = v1alpha1.Project{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: projectId,
-				},
-				Spec: v1alpha1.ProjectSpec{
-					Type:       v1alpha1.ProjectUser,
-					Namespaces: nil,
-					NamespaceSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							labelKeyRancherProjectId: projectId,
-						},
-					},
-					// Quota: core.ResourceRequirements{},
-				},
-			}
-		}
-		if ns.Name == metav1.NamespaceDefault {
-			project.Spec.Type = v1alpha1.ProjectDefault
-		} else if ns.Name == metav1.NamespaceSystem {
-			project.Spec.Type = v1alpha1.ProjectSystem
-		}
-		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
-
-		projects[projectId] = project
-	}
-
-	result := make([]v1alpha1.Project, 0, len(projects))
-	for _, p := range projects {
-		result = append(result, p)
-	}
-	return result, nil
-}
-
-func GetRancherProject(kc client.Client, name string) (*v1alpha1.Project, error) {
-	var list core.NamespaceList
-	err := kc.List(context.TODO(), &list, client.MatchingLabels{
-		labelKeyRancherProjectId: name,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	project := v1alpha1.Project{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Spec: v1alpha1.ProjectSpec{
-			Type:       v1alpha1.ProjectUser,
-			Namespaces: nil,
-			NamespaceSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					labelKeyRancherProjectId: name,
-				},
-			},
-			// Quota: core.ResourceRequirements{},
-		},
-	}
-	for _, ns := range list.Items {
-		if ns.Name == metav1.NamespaceDefault {
-			project.Spec.Type = v1alpha1.ProjectDefault
-		} else if ns.Name == metav1.NamespaceSystem {
-			project.Spec.Type = v1alpha1.ProjectSystem
-		}
-		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
-	}
-
-	return &project, nil
-}
-
-/*
-apiVersion: meta.k8s.appscode.com/v1alpha1
-kind: ResourceQuery
-request:
-  outputFormat: Ref
-  source:
-    name: rancher-monitoring-prometheus
-    namespace: cattle-monitoring-system
-    resource:
-      group: monitoring.coreos.com
-      kind: Prometheus
-      version: v1
-  target:
-    query:
-      byLabel: exposed_by
-      type: GraphQL
-    ref:
-      group: ""
-      kind: Service
-response:
-- name: prometheus-operated
-  namespace: cattle-monitoring-system
-- name: rancher-monitoring-prometheus
-  namespace: cattle-monitoring-system
-*/
 
 func FindServiceForPrometheus(rmc versioned.Interface, key types.NamespacedName) (*core.Service, error) {
 	q := &rsapi.ResourceQuery{
@@ -372,7 +177,7 @@ const (
 )
 
 func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned.Interface, key types.NamespacedName) (*mona.PrometheusConfig, error) {
-	cm := DetectClusterManager(kc)
+	cm := clustermanger.DetectClusterManager(kc)
 
 	var prom monitoringv1.Prometheus
 	err := kc.Get(context.TODO(), key, &prom)
@@ -560,23 +365,20 @@ func SetupClusterForPrometheus(cfg *rest.Config, kc client.Client, rmc versioned
 	return &pcfg, nil
 }
 
-func IsDefault(kc client.Client, cm ClusterManager, key types.NamespacedName) (bool, error) {
-	switch cm {
-	case ManagedByRancher:
+func IsDefault(kc client.Client, cm managementv1alpha1.ClusterManager, key types.NamespacedName) (bool, error) {
+	if cm.ManagedByRancher() {
 		return IsRancherSystemResource(kc, key)
-	case ManagedByACE:
-		gvk := schema.GroupVersionKind{
-			Group:   monitoring.GroupName,
-			Version: monitoringv1.Version,
-			Kind:    "Prometheus",
-		}
-		return IsSingletonResource(kc, gvk, key)
 	}
-	return false, nil
+	gvk := schema.GroupVersionKind{
+		Group:   monitoring.GroupName,
+		Version: monitoringv1.Version,
+		Kind:    "Prometheus",
+	}
+	return IsSingletonResource(kc, gvk, key)
 }
 
 func IsRancherSystemResource(kc client.Client, key types.NamespacedName) (bool, error) {
-	if !IsRancherManaged(kc.RESTMapper()) {
+	if !clustermanger.IsRancherManaged(kc.RESTMapper()) {
 		return false, errors.New("not a Rancher managed cluster")
 	}
 
@@ -617,33 +419,21 @@ func IsSingletonResource(kc client.Client, gvk schema.GroupVersionKind, key type
 	return len(list.Items) == 1, nil
 }
 
-type ClusterManager string
-
-const (
-	ManagedByACE     ClusterManager = "ACE"
-	ManagedByRancher ClusterManager = "Rancher"
-	// ManagedByOpenShift ClusterManager = "OpenShift"
-)
-
-func (c ClusterManager) IsUnknown() bool {
-	return c != ManagedByACE && c != ManagedByRancher
-}
-
 const presetsMonitoring = "monitoring-presets"
 
 var defaultPresetsLabels = map[string]string{
 	"charts.x-helm.dev/is-default-preset": "true",
 }
 
-func CreatePreset(kc client.Client, cm ClusterManager, p *monitoringv1.Prometheus, isDefault bool) error {
+func CreatePreset(kc client.Client, cm managementv1alpha1.ClusterManager, p *monitoringv1.Prometheus, isDefault bool) error {
 	presets := GeneratePresetForPrometheus(*p)
 	presetBytes, err := json.Marshal(presets)
 	if err != nil {
 		return err
 	}
 
-	switch cm {
-	case ManagedByRancher:
+	if cm.ManagedByRancher() {
+
 		if isDefault {
 			// create ClusterChartPreset
 			err := CreateClusterPreset(kc, presetBytes)
@@ -657,17 +447,10 @@ func CreatePreset(kc client.Client, cm ClusterManager, p *monitoringv1.Prometheu
 				return err2
 			}
 		}
-	case ManagedByACE:
-		// create ClusterChartPreset
-		err = CreateClusterPreset(kc, presetBytes)
-		if err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("unknown ClusterManager %s", cm)
-	}
-
-	return nil
+		return nil
+	} // create ClusterChartPreset
+	err = CreateClusterPreset(kc, presetBytes)
+	return err
 }
 
 func CreateClusterPreset(kc client.Client, presetBytes []byte) error {

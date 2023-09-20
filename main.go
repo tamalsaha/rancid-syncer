@@ -24,7 +24,7 @@ import (
 	kutil "kmodules.xyz/client-go"
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cu "kmodules.xyz/client-go/client"
-	clustermanger "kmodules.xyz/client-go/cluster/manager"
+	clustermanger "kmodules.xyz/client-go/cluster"
 	meta_util "kmodules.xyz/client-go/meta"
 	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"

@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
 	kmapi "kmodules.xyz/client-go/api/v1"
-	clustermanger "kmodules.xyz/client-go/cluster/manager"
+	clustermanger "kmodules.xyz/client-go/cluster"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
 	"kmodules.xyz/resource-metadata/hub/resourceeditors"

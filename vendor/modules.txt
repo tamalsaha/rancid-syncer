@@ -29,18 +29,12 @@ github.com/Masterminds/semver/v3
 # github.com/Masterminds/sprig/v3 v3.2.2 => github.com/gomodules/sprig/v3 v3.2.3-0.20220405051441-0a8a99bac1b8
 ## explicit; go 1.17
 github.com/Masterminds/sprig/v3
-# github.com/alessio/shellescape v1.4.1
-## explicit; go 1.14
-github.com/alessio/shellescape
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
 # github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/cyphar/filepath-securejoin v0.2.3
-## explicit; go 1.13
-github.com/cyphar/filepath-securejoin
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
@@ -242,15 +236,6 @@ github.com/spf13/cast
 github.com/spf13/pflag
 # github.com/stretchr/testify v1.8.3
 ## explicit; go 1.20
-# github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb
-## explicit
-github.com/xeipuuv/gojsonpointer
-# github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415
-## explicit
-github.com/xeipuuv/gojsonreference
-# github.com/xeipuuv/gojsonschema v1.2.0
-## explicit
-github.com/xeipuuv/gojsonschema
 # github.com/yudai/gojsondiff v1.0.0
 ## explicit
 github.com/yudai/gojsondiff
@@ -418,15 +403,6 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# helm.sh/helm/v3 v3.10.3 => github.com/x-helm/helm/v3 v3.10.2-0.20230910175645-ad538d5bfc73
-## explicit; go 1.18
-helm.sh/helm/v3/internal/ignore
-helm.sh/helm/v3/internal/sympath
-helm.sh/helm/v3/internal/version
-helm.sh/helm/v3/pkg/chart
-helm.sh/helm/v3/pkg/chart/loader
-helm.sh/helm/v3/pkg/chartutil
-helm.sh/helm/v3/pkg/strvals
 # k8s.io/api v0.25.4
 ## explicit; go 1.19
 k8s.io/api/admission/v1
@@ -706,7 +682,7 @@ k8s.io/utils/net
 k8s.io/utils/pointer
 k8s.io/utils/strings/slices
 k8s.io/utils/trace
-# kmodules.xyz/client-go v0.25.34-0.20230920003018-55c292fadb04
+# kmodules.xyz/client-go v0.25.34-0.20230920051128-f758ec0276ab
 ## explicit; go 1.18
 kmodules.xyz/client-go
 kmodules.xyz/client-go/api/v1
@@ -715,8 +691,9 @@ kmodules.xyz/client-go/apiextensions/v1
 kmodules.xyz/client-go/apis/management/v1alpha1
 kmodules.xyz/client-go/client
 kmodules.xyz/client-go/client/apiutil
-kmodules.xyz/client-go/cluster/manager
+kmodules.xyz/client-go/cluster
 kmodules.xyz/client-go/meta
+kmodules.xyz/client-go/tools/clusterid
 # kmodules.xyz/custom-resources v0.25.2
 ## explicit; go 1.18
 kmodules.xyz/custom-resources/apis/appcatalog
@@ -753,9 +730,6 @@ kmodules.xyz/resource-metrics/batch/v1beta1
 kmodules.xyz/resource-metrics/core/v1
 kmodules.xyz/resource-metrics/kubedb.com/v1alpha2
 kmodules.xyz/resource-metrics/kubevault.com/v1alpha2
-# kubepack.dev/lib-helm v0.7.1
-## explicit; go 1.18
-kubepack.dev/lib-helm/pkg/values
 # sigs.k8s.io/cli-utils v0.34.0
 ## explicit; go 1.18
 sigs.k8s.io/cli-utils/pkg/kstatus/status

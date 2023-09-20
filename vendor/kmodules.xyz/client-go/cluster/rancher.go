@@ -18,13 +18,12 @@ package cluster
 
 import (
 	"context"
-	"errors"
+	"sort"
 
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -40,17 +39,33 @@ func IsRancherManaged(mapper meta.RESTMapper) bool {
 	return false
 }
 
-func IsRancherSystemResource(kc client.Client, key types.NamespacedName) (bool, error) {
-	if !IsRancherManaged(kc.RESTMapper()) {
-		return false, errors.New("not a Rancher managed cluster")
-	}
+func IsInDefaultProject(kc client.Client, nsName string) (bool, error) {
+	return isInProject(kc, nsName, metav1.NamespaceDefault)
+}
 
-	if key.Namespace == metav1.NamespaceSystem {
+func IsInSystemProject(kc client.Client, nsName string) (bool, error) {
+	return isInProject(kc, nsName, metav1.NamespaceSystem)
+}
+
+func IsInUserProject(kc client.Client, nsName string) (bool, error) {
+	isDefault, err := IsInDefaultProject(kc, nsName)
+	if err != nil {
+		return false, err
+	}
+	isSys, err := IsInSystemProject(kc, nsName)
+	if err != nil {
+		return false, err
+	}
+	return !isDefault && !isSys, nil
+}
+
+func isInProject(kc client.Client, nsName, seedNS string) (bool, error) {
+	if nsName == seedNS {
 		return true, nil
 	}
 
 	var ns core.Namespace
-	err := kc.Get(context.TODO(), client.ObjectKey{Name: key.Namespace}, &ns)
+	err := kc.Get(context.TODO(), client.ObjectKey{Name: nsName}, &ns)
 	if err != nil {
 		return false, err
 	}
@@ -59,15 +74,53 @@ func IsRancherSystemResource(kc client.Client, key types.NamespacedName) (bool, 
 		return false, nil
 	}
 
-	var sysNS core.Namespace
-	err = kc.Get(context.TODO(), client.ObjectKey{Name: metav1.NamespaceSystem}, &sysNS)
+	seedProjectId, _, err := GetProjectId(kc, seedNS)
 	if err != nil {
 		return false, err
 	}
+	return projectId == seedProjectId, nil
+}
 
-	sysProjectId, exists := ns.Labels[LabelKeyRancherProjectId]
-	if !exists {
-		return false, nil
+func GetDefaultProjectId(kc client.Client) (string, bool, error) {
+	return GetProjectId(kc, metav1.NamespaceDefault)
+}
+
+func GetSystemProjectId(kc client.Client) (string, bool, error) {
+	return GetProjectId(kc, metav1.NamespaceSystem)
+}
+
+func GetProjectId(kc client.Client, nsName string) (string, bool, error) {
+	var ns core.Namespace
+	err := kc.Get(context.TODO(), client.ObjectKey{Name: nsName}, &ns)
+	if err != nil {
+		return "", false, err
 	}
-	return projectId == sysProjectId, nil
+	projectId, found := ns.Labels[LabelKeyRancherProjectId]
+	return projectId, found, nil
+}
+
+func ListSiblingNamespaces(kc client.Client, nsName string) ([]string, error) {
+	projectId, found, err := GetProjectId(kc, nsName)
+	if err != nil || !found {
+		return nil, err
+	}
+	return ListProjectNamespaces(kc, projectId)
+}
+
+func ListProjectNamespaces(kc client.Client, projectId string) ([]string, error) {
+	var list core.NamespaceList
+	err := kc.List(context.TODO(), &list, client.MatchingLabels{
+		LabelKeyRancherProjectId: projectId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	namespaces := make([]string, 0, len(list.Items))
+	for _, x := range list.Items {
+		namespaces = append(namespaces, x.Name)
+	}
+	sort.Slice(namespaces, func(i, j int) bool {
+		return namespaces[i] < namespaces[j]
+	})
+	return namespaces, nil
 }

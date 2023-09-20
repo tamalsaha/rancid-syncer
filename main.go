@@ -41,6 +41,7 @@ import (
 func NewClient() (*rest.Config, versioned.Interface, client.Client, error) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
+	_ = chartsapi.AddToScheme(scheme)
 
 	ctrl.SetLogger(klogr.New())
 	cfg := ctrl.GetConfigOrDie()

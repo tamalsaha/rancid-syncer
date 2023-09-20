@@ -10,8 +10,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	cu "kmodules.xyz/client-go/client"
+	clustermeta "kmodules.xyz/client-go/cluster"
 	meta_util "kmodules.xyz/client-go/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sort"
+	"strings"
 )
 
 /*
@@ -60,6 +63,33 @@ spec:
       app.kubernetes.io/name: panopticon
 */
 
+func ListProjectNamespaces(kc client.Client, seedNS string) ([]string, error) {
+	var seed core.Namespace
+	err := kc.Get(context.TODO(), client.ObjectKey{Name: seedNS}, &seed)
+	if err != nil {
+		return nil, err
+	}
+	projectId, found := seed.Labels[clustermeta.LabelKeyRancherProjectId]
+	if !found {
+		return nil, nil
+	}
+	var list core.NamespaceList
+	err = kc.List(context.TODO(), &list, client.MatchingLabels{
+		clustermeta.LabelKeyRancherProjectId: projectId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	namespaces := make([]string, 0, len(list.Items))
+	for _, x := range list.Items {
+		namespaces = append(namespaces, x.Name)
+	}
+	sort.Slice(namespaces, func(i, j int) bool {
+		return namespaces[i] < namespaces[j]
+	})
+	return namespaces, nil
+}
+
 func CreateServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, panopticon *core.Service) (*monitoringv1.ServiceMonitor, error) {
 	svcmon := monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -79,6 +109,15 @@ func CreateServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, panop
 		klog.Warningln("Prometheus %s/%s uses match expressions in ServiceMonitorSelector", prom.Namespace, prom.Name)
 	}
 
+	var namespaces []string
+	var err error
+	if clustermeta.IsRancherManaged(kc.RESTMapper()) {
+		namespaces, err = ListProjectNamespaces(kc, prom.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	vt, err := cu.CreateOrPatch(context.TODO(), kc, &svcmon, func(in client.Object, createOp bool) client.Object {
 		obj := in.(*monitoringv1.ServiceMonitor)
 
@@ -95,11 +134,33 @@ func CreateServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, panop
 			MatchLabels: panopticon.Labels,
 		}
 
+		relabelConfigs := make([]*monitoringv1.RelabelConfig, 0, 2)
+		if len(namespaces) > 0 {
+			/*
+			  params:
+			    match[]:
+			    - '{namespace=~"app-1-ns1|app-1-ns2|app-1-ns3|cattle-project-p-tkgpc-monitoring",
+			      job=~"kube-state-metrics|kubelet|k3s-server"}'
+			    - '{namespace=~"app-1-ns1|app-1-ns2|app-1-ns3|cattle-project-p-tkgpc-monitoring",
+			      job=""}'
+			*/
+			relabelConfigs = append(relabelConfigs, &monitoringv1.RelabelConfig{
+				SourceLabels: []monitoringv1.LabelName{"namespace"}, // app_namespace ?
+				Regex:        strings.Join(namespaces, "|"),
+				Action:       "keep",
+			})
+		}
+		relabelConfigs = append(relabelConfigs, &monitoringv1.RelabelConfig{
+			Regex:  "pod|service|endpoint|namespace",
+			Action: "labeldrop",
+		})
+
 		obj.Spec.Endpoints = []monitoringv1.Endpoint{
 			{
 				Scheme:          "https",
 				Port:            "api",
 				Interval:        "10s",
+				RelabelConfigs:  relabelConfigs,
 				BearerTokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token",
 				TLSConfig: &monitoringv1.TLSConfig{
 					SafeTLSConfig: monitoringv1.SafeTLSConfig{
@@ -113,9 +174,6 @@ func CreateServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, panop
 						},
 						ServerName: fmt.Sprintf("%s.%s.svc", panopticon.Name, panopticon.Namespace),
 					},
-				},
-				RelabelConfigs: []*monitoringv1.RelabelConfig{
-					{},
 				},
 			},
 			{

@@ -3,17 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
 	kmapi "kmodules.xyz/client-go/api/v1"
-	clustermanger "kmodules.xyz/client-go/cluster"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
 	"kmodules.xyz/resource-metadata/hub/resourceeditors"
@@ -21,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
-	"sort"
 	chartsapi "x-helm.dev/apimachinery/apis/charts/v1alpha1"
 )
 
@@ -79,43 +77,13 @@ func main() {
 
 func useKubebuilderClient() error {
 	fmt.Println("Using kubebuilder client")
-	cfg, rmc, kc, err := NewClient()
+	_, _, kc, err := NewClient()
 	if err != nil {
 		return err
 	}
 
-	pcfg, err := SetupClusterForPrometheus(cfg, kc, rmc, types.NamespacedName{
-		Namespace: "cattle-monitoring-system",
-		Name:      "rancher-monitoring-prometheus",
-	})
-	if err != nil {
-		return err
-	}
-	data, err := yaml.Marshal(pcfg)
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(data))
-	// os.Exit(1)
-	// -----------------------------------------------------------
-
-	svc, err := FindServiceForPrometheus(rmc, types.NamespacedName{
-		Namespace: "cattle-monitoring-system",
-		Name:      "rancher-monitoring-prometheus",
-	})
-	if err != nil {
-		return err
-	}
-	fmt.Println(svc.Name)
-
-	rancher := clustermanger.IsRancherManaged(kc.RESTMapper())
-	fmt.Println("IsRancherManaged", rancher)
-
-	projects, err := clustermanger.ListRancherProjects(kc)
-	if err != nil {
-		return err
-	}
-	data, err = yaml.Marshal(projects)
+	presets, err := MergePresetValues(kc, chartsapi.ChartPresetFlatRef{})
+	data, err := yaml.Marshal(presets)
 	if err != nil {
 		return err
 	}

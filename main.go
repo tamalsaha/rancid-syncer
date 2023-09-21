@@ -109,16 +109,6 @@ func useKubebuilderClient() error {
 	rancher := clustermanger.IsRancherManaged(kc.RESTMapper())
 	fmt.Println("IsRancherManaged", rancher)
 
-	projects, err := clustermanger.ListRancherProjects(kc)
-	if err != nil {
-		return err
-	}
-	data, err = yaml.Marshal(projects)
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(data))
-
 	return nil
 }
 

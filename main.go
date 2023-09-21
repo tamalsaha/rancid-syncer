@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	openvizapi "go.openviz.dev/apimachinery/apis/openviz/v1alpha1"
@@ -25,22 +24,26 @@ import (
 	kmapi "kmodules.xyz/client-go/api/v1"
 	cu "kmodules.xyz/client-go/client"
 	clustermanger "kmodules.xyz/client-go/cluster"
+	clustermeta "kmodules.xyz/client-go/cluster"
 	meta_util "kmodules.xyz/client-go/meta"
 	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
+	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
+	"sort"
 	chartsapi "x-helm.dev/apimachinery/apis/charts/v1alpha1"
 )
 
 func NewClient() (*rest.Config, versioned.Interface, client.Client, error) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
+	_ = monitoringv1.AddToScheme(scheme)
 	_ = chartsapi.AddToScheme(scheme)
 
 	ctrl.SetLogger(klogr.New())
@@ -81,6 +84,24 @@ func useKubebuilderClient() error {
 	if err != nil {
 		return err
 	}
+
+	var prom monitoringv1.Prometheus
+	err = kc.Get(context.TODO(), types.NamespacedName{
+		//Name:      "cattle-project-p-mrbgq-mon-prometheus",
+		//Namespace: "cattle-project-p-mrbgq-monitoring",
+
+		Namespace: "cattle-monitoring-system",
+		Name:      "rancher-monitoring-prometheus",
+	}, &prom)
+	if err != nil {
+		return err
+	}
+	ns, err := NamespaceForPreset(kc, &prom)
+	if err != nil {
+		return err
+	}
+	fmt.Println(ns)
+	os.Exit(1)
 
 	pcfg, err := SetupClusterForPrometheus(cfg, kc, rmc, types.NamespacedName{
 		Namespace: "cattle-monitoring-system",
@@ -626,4 +647,30 @@ func CreateGrafanaAppBinding(kc client.Client, key types.NamespacedName, config 
 	}
 
 	return abvt, err
+}
+
+func NamespaceForPreset(kc client.Client, prom *monitoringv1.Prometheus) (string, error) {
+	ls := prom.Spec.ServiceMonitorNamespaceSelector
+	if ls.MatchLabels == nil {
+		ls.MatchLabels = make(map[string]string)
+	}
+	ls.MatchLabels[clustermeta.LabelKeyRancherHelmProjectOperated] = "true"
+	sel, err := metav1.LabelSelectorAsSelector(ls)
+	if err != nil {
+		return "", err
+	}
+
+	var nsList core.NamespaceList
+	err = kc.List(context.TODO(), &nsList, client.MatchingLabelsSelector{Selector: sel})
+	if err != nil {
+		return "", err
+	}
+	namespaces := nsList.Items
+	if len(namespaces) == 0 {
+		return "", fmt.Errorf("failed to select AppBinding namespace for Prometheus %s/%s", prom.Namespace, prom.Name)
+	}
+	sort.Slice(namespaces, func(i, j int) bool {
+		return namespaces[i].CreationTimestamp.Before(&namespaces[j].CreationTimestamp)
+	})
+	return namespaces[0].Name, nil
 }

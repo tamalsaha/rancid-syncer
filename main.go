@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -772,7 +773,7 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 
 			var presetList chartsapi.ChartPresetList
 			err := kc.List(context.TODO(), &presetList, client.InNamespace(ns))
-			if err != nil {
+			if err != nil && !meta.IsNoMatchError(err) {
 				return nil, err
 			}
 			for _, x := range presetList.Items {
@@ -809,13 +810,70 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		projects[projectId] = prj
 	}
 
-	var promList monitoringv1.PrometheusList
-	err = kc.List(context.TODO(), &promList)
-	if err != nil {
-		return nil, err
-	}
-	for _, prom := range promList.Items {
-		fmt.Println(prom.Name)
+	if clustermeta.IsRancherManaged(kc.RESTMapper()) {
+		sysProjectId, _, err := clustermeta.GetSystemProjectId(kc)
+		if err != nil {
+			return nil, err
+		}
+
+		var promList monitoringv1.PrometheusList
+		err = kc.List(context.TODO(), &promList)
+		if err != nil && !meta.IsNoMatchError(err) {
+			return nil, err
+		}
+		for _, prom := range promList.Items {
+			promProjectId, found, err := clustermeta.GetProjectId(kc, prom.Namespace)
+			if err != nil {
+				return nil, err
+			} else if !found {
+				continue
+			}
+
+			projectId := promProjectId
+			prj, found := projects[projectId]
+			if !found {
+				if prom.Spec.ServiceMonitorNamespaceSelector != nil {
+					projectId = prom.Spec.ServiceMonitorNamespaceSelector.MatchLabels[clustermeta.LabelKeyRancherHelmProjectId]
+					prj, found = projects[projectId]
+				}
+			}
+			if !found {
+				continue
+			}
+
+			if prj.Spec.Monitoring == nil {
+				prj.Spec.Monitoring = &rsapi.ProjectMonitoring{}
+			}
+			prj.Spec.Monitoring.PrometheusRef = &kmapi.ObjectReference{
+				Namespace: prom.Namespace,
+				Name:      prom.Name,
+			}
+
+			alertmanager, err := FindSiblingAlertManagerForPrometheus(kc, client.ObjectKeyFromObject(prom))
+			if err != nil {
+				return nil, err
+			}
+			prj.Spec.Monitoring.AlertmanagerRef = &kmapi.ObjectReference{
+				Namespace: alertmanager.Namespace,
+				Name:      alertmanager.Name,
+			}
+
+			if projectId == sysProjectId {
+				prj.Spec.Monitoring.AlertmanagerURL = alertmanager.Spec.ExternalURL
+				prj.Spec.Monitoring.PrometheusURL = prom.Spec.ExternalURL
+				prj.Spec.Monitoring.GrafanaURL = strings.Replace(
+					prj.Spec.Monitoring.PrometheusURL,
+					"/services/http:rancher-monitoring-prometheus:9090/proxy",
+					"/services/http:rancher-monitoring-grafana:80/proxy/?orgId=1",
+					1)
+			} else {
+				prj.Spec.Monitoring.AlertmanagerURL,
+					prj.Spec.Monitoring.GrafanaURL,
+					prj.Spec.Monitoring.PrometheusURL = DetectProjectMonitoringURLs(kc, prom.Namespace)
+			}
+
+			projects[projectId] = prj
+		}
 	}
 
 	result := make([]rsapi.Project, 0, len(projects))
@@ -823,6 +881,25 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		result = append(result, p)
 	}
 	return result, nil
+}
+
+func DetectProjectMonitoringURLs(kc client.Client, promNS string) (alertmanagerURL, grafanaURL, prometheusURL string) {
+	var prjHelm unstructured.Unstructured
+	prjHelm.SetAPIVersion("helm.cattle.io/v1alpha1")
+	prjHelm.SetKind("ProjectHelmChart")
+	key := client.ObjectKey{
+		Name:      "project-monitoring",
+		Namespace: strings.TrimSuffix(promNS, "-monitoring"),
+	}
+	err := kc.Get(context.TODO(), key, &prjHelm)
+	if err != nil {
+		return
+	}
+
+	alertmanagerURL, _, _ = unstructured.NestedString(prjHelm.UnstructuredContent(), "status", "dashboardValues", "alertmanagerURL")
+	grafanaURL, _, _ = unstructured.NestedString(prjHelm.UnstructuredContent(), "status", "dashboardValues", "grafanaURL")
+	prometheusURL, _, _ = unstructured.NestedString(prjHelm.UnstructuredContent(), "status", "dashboardValues", "prometheusURL")
+	return
 }
 
 func GetRancherProject(kc client.Client, projectId string) (*rsapi.Project, error) {

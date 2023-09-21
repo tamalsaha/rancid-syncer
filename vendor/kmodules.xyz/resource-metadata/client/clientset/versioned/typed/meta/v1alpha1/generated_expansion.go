@@ -18,7 +18,11 @@ limitations under the License.
 
 package v1alpha1
 
+type ChartPresetQueryExpansion interface{}
+
 type MenuOutlineExpansion interface{}
+
+type ProjectExpansion interface{}
 
 type RenderExpansion interface{}
 

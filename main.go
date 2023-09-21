@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	openvizapi "go.openviz.dev/apimachinery/apis/openviz/v1alpha1"
@@ -10,6 +11,7 @@ import (
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -37,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
 	"sort"
+	"time"
 	chartsapi "x-helm.dev/apimachinery/apis/charts/v1alpha1"
 )
 
@@ -673,4 +676,130 @@ func NamespaceForPreset(kc client.Client, prom *monitoringv1.Prometheus) (string
 		return namespaces[i].CreationTimestamp.Before(&namespaces[j].CreationTimestamp)
 	})
 	return namespaces[0].Name, nil
+}
+
+/*
+apiVersion: helm.cattle.io/v1alpha1
+kind: ProjectHelmChart
+metadata:
+  name: project-monitoring
+  namespace: cattle-project-p-tkgpc
+
+status:
+  dashboardValues:
+    alertmanagerURL: >-
+      https://172.234.33.183/k8s/clusters/c-m-mhqtw2cs/api/v1/namespaces/cattle-project-p-tkgpc-monitoring/services/http:cattle-project-p-tkgpc-mon-alertmanager:9093/proxy
+    grafanaURL: >-
+      https://172.234.33.183/k8s/clusters/c-m-mhqtw2cs/api/v1/namespaces/cattle-project-p-tkgpc-monitoring/services/http:cattle-project-p-tkgpc-monitoring-grafana:80/proxy
+    prometheusURL: >-
+      https://172.234.33.183/k8s/clusters/c-m-mhqtw2cs/api/v1/namespaces/cattle-project-p-tkgpc-monitoring/services/http:cattle-project-p-tkgpc-mon-prometheus:9090/proxy
+
+*/
+
+func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
+	var list core.NamespaceList
+	err := kc.List(context.TODO(), &list)
+	if meta.IsNoMatchError(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	projects := map[string]rsapi.Project{}
+	now := time.Now()
+	for _, ns := range list.Items {
+		projectId, exists := ns.Labels[clustermeta.LabelKeyRancherFieldProjectId]
+		if !exists {
+			continue
+		}
+
+		project, exists := projects[projectId]
+		if !exists {
+			project = rsapi.Project{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              projectId,
+					CreationTimestamp: metav1.NewTime(now),
+					UID:               types.UID(uuid.Must(uuid.NewUUID()).String()),
+					Labels: map[string]string{
+						clustermeta.LabelKeyRancherFieldProjectId: projectId,
+					},
+				},
+				Spec: rsapi.ProjectSpec{
+					Type:       rsapi.ProjectUser,
+					Namespaces: nil,
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							clustermeta.LabelKeyRancherFieldProjectId: projectId,
+						},
+					},
+				},
+			}
+		}
+
+		if ns.CreationTimestamp.Before(&project.CreationTimestamp) {
+			project.CreationTimestamp = ns.CreationTimestamp
+		}
+
+		if ns.Name == metav1.NamespaceDefault {
+			project.Spec.Type = rsapi.ProjectDefault
+		} else if ns.Name == metav1.NamespaceSystem {
+			project.Spec.Type = rsapi.ProjectSystem
+		}
+		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
+
+		projects[projectId] = project
+	}
+
+	result := make([]rsapi.Project, 0, len(projects))
+	for _, p := range projects {
+		result = append(result, p)
+	}
+	return result, nil
+}
+
+func GetRancherProject(kc client.Client, projectId string) (*rsapi.Project, error) {
+	var list core.NamespaceList
+	err := kc.List(context.TODO(), &list, client.MatchingLabels{
+		clustermeta.LabelKeyRancherFieldProjectId: projectId,
+	})
+	if err != nil {
+		return nil, err
+	} else if len(list.Items) == 0 {
+		return nil, apierrors.NewNotFound(gr, projectId)
+	}
+
+	now := time.Now()
+	project := rsapi.Project{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              projectId,
+			CreationTimestamp: metav1.NewTime(now),
+			UID:               types.UID(uuid.Must(uuid.NewUUID()).String()),
+			Labels: map[string]string{
+				clustermeta.LabelKeyRancherFieldProjectId: projectId,
+			},
+		},
+		Spec: rsapi.ProjectSpec{
+			Type:       rsapi.ProjectUser,
+			Namespaces: nil,
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					clustermeta.LabelKeyRancherFieldProjectId: projectId,
+				},
+			},
+		},
+	}
+	for _, ns := range list.Items {
+		if ns.CreationTimestamp.Before(&project.CreationTimestamp) {
+			project.CreationTimestamp = ns.CreationTimestamp
+		}
+
+		if ns.Name == metav1.NamespaceDefault {
+			project.Spec.Type = rsapi.ProjectDefault
+		} else if ns.Name == metav1.NamespaceSystem {
+			project.Spec.Type = rsapi.ProjectSystem
+		}
+		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
+	}
+
+	return &project, nil
 }

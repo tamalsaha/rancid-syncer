@@ -28,7 +28,9 @@ import (
 
 type MetaV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	ChartPresetQueriesGetter
 	MenuOutlinesGetter
+	ProjectsGetter
 	RendersGetter
 	RenderDashboardsGetter
 	RenderMenusGetter
@@ -47,8 +49,16 @@ type MetaV1alpha1Client struct {
 	restClient rest.Interface
 }
 
+func (c *MetaV1alpha1Client) ChartPresetQueries() ChartPresetQueryInterface {
+	return newChartPresetQueries(c)
+}
+
 func (c *MetaV1alpha1Client) MenuOutlines(namespace string) MenuOutlineInterface {
 	return newMenuOutlines(c, namespace)
+}
+
+func (c *MetaV1alpha1Client) Projects() ProjectInterface {
+	return newProjects(c)
 }
 
 func (c *MetaV1alpha1Client) Renders() RenderInterface {

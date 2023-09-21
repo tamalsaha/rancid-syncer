@@ -88,6 +88,16 @@ func useKubebuilderClient() error {
 		return err
 	}
 
+	projects, err := ListRancherProjects(kc)
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(projects)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+
 	var prom monitoringv1.Prometheus
 	err = kc.Get(context.TODO(), types.NamespacedName{
 		//Name:      "cattle-project-p-mrbgq-mon-prometheus",
@@ -734,6 +744,7 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 					},
 				},
 			}
+
 		}
 
 		if ns.CreationTimestamp.Before(&project.CreationTimestamp) {
@@ -747,7 +758,46 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		}
 		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
 
+		//var presetList chartsapi.ChartPresetList
+		//kc.List(context.TODO(), &presetList, client.InNamespace())
+
 		projects[projectId] = project
+	}
+
+	for projectId, prj := range projects {
+		presets := prj.Spec.Presets
+		for _, ns := range prj.Spec.Namespaces {
+			var presetList chartsapi.ChartPresetList
+			err := kc.List(context.TODO(), &presetList, client.InNamespace(ns))
+			if err != nil {
+				return nil, err
+			}
+			for _, x := range presetList.Items {
+				presets = append(presets, rsapi.SourceLocator{
+					Resource: kmapi.ResourceID{
+						Group:   chartsapi.GroupVersion.Group,
+						Version: chartsapi.GroupVersion.Version,
+						Name:    "",
+						Kind:    chartsapi.ResourceKindChartPreset,
+						Scope:   "",
+					},
+					Ref: kmapi.ObjectReference{
+						Namespace: x.Namespace,
+						Name:      x.Name,
+					},
+				})
+			}
+		}
+
+		sort.Slice(presets, func(i, j int) bool {
+			if presets[i].Ref.Namespace != presets[j].Ref.Namespace {
+				return presets[i].Ref.Namespace < presets[j].Ref.Namespace
+			}
+			return presets[i].Ref.Name < presets[j].Ref.Name
+		})
+
+		prj.Spec.Presets = presets
+		projects[projectId] = prj
 	}
 
 	result := make([]rsapi.Project, 0, len(projects))
@@ -758,6 +808,9 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 }
 
 func GetRancherProject(kc client.Client, projectId string) (*rsapi.Project, error) {
+	// FIX
+	var gr schema.GroupResource
+
 	var list core.NamespaceList
 	err := kc.List(context.TODO(), &list, client.MatchingLabels{
 		clustermeta.LabelKeyRancherFieldProjectId: projectId,

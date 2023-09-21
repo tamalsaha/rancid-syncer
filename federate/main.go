@@ -109,5 +109,30 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 
 	sysProjectId, err := clustermeta.GetSystemProjectId(kc)
 
+	var promList monitoringv1.PrometheusList
+	if err := kc.List(context.TODO(), &promList); err != nil {
+		log.Error(err, "unable to list Prometheus")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	var errList []error
+	for _, prom := range promList.Items {
+		siblings, err := clustermeta.AreSiblingNamespaces(kc, req.Namespace, prom.Namespace)
+		if err != nil {
+			errList = append(errList, err)
+			continue
+			// return ctrl.Result{}, err // should we do rest of the loop?
+		}
+		if siblings {
+			continue
+		}
+		syncServiceMonitor(kc, prom, &svcMon)
+
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func syncServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *monitoringv1.ServiceMonitor) error {
+
 }

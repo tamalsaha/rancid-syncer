@@ -107,6 +107,18 @@ func ListSiblingNamespaces(kc client.Client, nsName string) ([]core.Namespace, e
 	return ListProjectNamespaces(kc, projectId)
 }
 
+func AreSiblingNamespaces(kc client.Client, ns1, ns2 string) (bool, error) {
+	p1, found, err := GetProjectId(kc, ns1)
+	if err != nil || !found {
+		return false, err
+	}
+	p2, found, err := GetProjectId(kc, ns2)
+	if err != nil || !found {
+		return false, err
+	}
+	return p1 == p2, nil
+}
+
 func ListProjectNamespaces(kc client.Client, projectId string) ([]core.Namespace, error) {
 	var list core.NamespaceList
 	err := kc.List(context.TODO(), &list, client.MatchingLabels{

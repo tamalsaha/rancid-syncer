@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"k8s.io/apimachinery/pkg/types"
+	clustermeta "kmodules.xyz/client-go/cluster"
+	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -76,6 +78,36 @@ func useKubebuilderClient() error {
 
 func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
+
+	var svcMon monitoringv1.ServiceMonitor
+	if err := kc.Get(ctx, req.NamespacedName, &svcMon); err != nil {
+		log.Error(err, "unable to fetch ServiceMonitor")
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// has federate label
+	val, found := svcMon.Labels[mona.FederatedKey]
+	if !found || val != "true" {
+		return ctrl.Result{}, nil
+	}
+
+	if !clustermeta.IsRancherManaged(kc.RESTMapper()) {
+		return ctrl.Result{}, nil
+	}
+
+	if yes, err := clustermeta.IsInSystemProject(kc, req.Namespace); err != nil {
+		log.Error(err, "unable to detect if in system project")
+		return ctrl.Result{}, err
+	} else if !yes {
+		// return error?
+		log.Info("can't federate service monitor that is not part of the system project")
+		return ctrl.Result{}, nil
+	}
+
+	sysProjectId, err := clustermeta.GetSystemProjectId(kc)
 
 	return ctrl.Result{}, nil
 }

@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
 	"sort"
+	"strings"
 	"time"
 	chartsapi "x-helm.dev/apimachinery/apis/charts/v1alpha1"
 )
@@ -758,15 +759,17 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		}
 		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
 
-		//var presetList chartsapi.ChartPresetList
-		//kc.List(context.TODO(), &presetList, client.InNamespace())
-
 		projects[projectId] = project
 	}
 
 	for projectId, prj := range projects {
+		var hasUseNs bool
 		presets := prj.Spec.Presets
 		for _, ns := range prj.Spec.Namespaces {
+			if !strings.HasPrefix(ns, "cattle-project-p-") {
+				hasUseNs = true
+			}
+
 			var presetList chartsapi.ChartPresetList
 			err := kc.List(context.TODO(), &presetList, client.InNamespace(ns))
 			if err != nil {
@@ -789,6 +792,12 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 			}
 		}
 
+		// drop projects where all namespaces start with cattle-project-p
+		if !hasUseNs {
+			delete(projects, projectId)
+			continue
+		}
+
 		sort.Slice(presets, func(i, j int) bool {
 			if presets[i].Ref.Namespace != presets[j].Ref.Namespace {
 				return presets[i].Ref.Namespace < presets[j].Ref.Namespace
@@ -798,6 +807,15 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 
 		prj.Spec.Presets = presets
 		projects[projectId] = prj
+	}
+
+	var promList monitoringv1.PrometheusList
+	err = kc.List(context.TODO(), &promList)
+	if err != nil {
+		return nil, err
+	}
+	for _, prom := range promList.Items {
+		fmt.Println(prom.Name)
 	}
 
 	result := make([]rsapi.Project, 0, len(projects))

@@ -682,7 +682,7 @@ k8s.io/utils/net
 k8s.io/utils/pointer
 k8s.io/utils/strings/slices
 k8s.io/utils/trace
-# kmodules.xyz/client-go v0.25.34-0.20230920230847-29eb8023cb24
+# kmodules.xyz/client-go v0.25.34-0.20230921001129-a3766b49003f
 ## explicit; go 1.18
 kmodules.xyz/client-go
 kmodules.xyz/client-go/api/v1
@@ -698,7 +698,7 @@ kmodules.xyz/client-go/tools/clusterid
 kmodules.xyz/custom-resources/apis/appcatalog
 kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1
 kmodules.xyz/custom-resources/crds
-# kmodules.xyz/monitoring-agent-api v0.25.2
+# kmodules.xyz/monitoring-agent-api v0.25.3-0.20230921024614-ff5edfe18660
 ## explicit; go 1.18
 kmodules.xyz/monitoring-agent-api/api/v1
 # kmodules.xyz/offshoot-api v0.25.4

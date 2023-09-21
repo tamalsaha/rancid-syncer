@@ -99,7 +99,7 @@ func GetProjectId(kc client.Client, nsName string) (string, bool, error) {
 	return projectId, found, nil
 }
 
-func ListSiblingNamespaces(kc client.Client, nsName string) ([]string, error) {
+func ListSiblingNamespaces(kc client.Client, nsName string) ([]core.Namespace, error) {
 	projectId, found, err := GetProjectId(kc, nsName)
 	if err != nil || !found {
 		return nil, err
@@ -107,7 +107,7 @@ func ListSiblingNamespaces(kc client.Client, nsName string) ([]string, error) {
 	return ListProjectNamespaces(kc, projectId)
 }
 
-func ListProjectNamespaces(kc client.Client, projectId string) ([]string, error) {
+func ListProjectNamespaces(kc client.Client, projectId string) ([]core.Namespace, error) {
 	var list core.NamespaceList
 	err := kc.List(context.TODO(), &list, client.MatchingLabels{
 		LabelKeyRancherProjectId: projectId,
@@ -115,12 +115,17 @@ func ListProjectNamespaces(kc client.Client, projectId string) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	namespaces := make([]string, 0, len(list.Items))
-	for _, x := range list.Items {
-		namespaces = append(namespaces, x.Name)
-	}
+	namespaces := list.Items
 	sort.Slice(namespaces, func(i, j int) bool {
-		return namespaces[i] < namespaces[j]
+		return namespaces[i].Name < namespaces[j].Name
 	})
 	return namespaces, nil
+}
+
+func Names(in []core.Namespace) (ret []string) {
+	ret = make([]string, 0, len(in))
+	for _, ns := range in {
+		ret = append(ret, ns.Name)
+	}
+	return
 }

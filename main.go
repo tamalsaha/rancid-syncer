@@ -124,7 +124,7 @@ func useKubebuilderClient() error {
 	if err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(pcfg)
+	data, err = yaml.Marshal(pcfg)
 	if err != nil {
 		return err
 	}

@@ -45,3 +45,15 @@ V
 /{uid}-{cluster-uid}/
 
 Data Source {cluster-name}-{projctId}
+
+## Service rbac
+
+- https://github.com/prometheus-operator/prometheus-operator/issues/5386
+
+- https://github.com/prometheus-operator/prometheus-operator/blob/7aa85a6f94dc5dbb41ba48fc27d9a255594e9e49/pkg/prometheus/promcfg.go#L1529-L1569
+
+- https://github.com/prometheus/prometheus/blob/86729d4d7b8659e2b90fa65ae2d42ecddc3657bc/docs/configuration/configuration.md?plain=1#L2150-L2178
+
+- https://github.com/prometheus/prometheus/blob/86729d4d7b8659e2b90fa65ae2d42ecddc3657bc/discovery/kubernetes/kubernetes.go#L253
+
+- https://github.com/prometheus/prometheus/blob/86729d4d7b8659e2b90fa65ae2d42ecddc3657bc/discovery/kubernetes/kubernetes.go#L201

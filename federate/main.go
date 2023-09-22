@@ -75,8 +75,8 @@ func useKubebuilderClient() error {
 
 	_, err = Reconcile(context.TODO(), kc, ctrl.Request{
 		NamespacedName: types.NamespacedName{
-			Namespace: "",
-			Name:      "",
+			Namespace: "kubeops",
+			Name:      "kube-ui-server",
 		},
 	})
 	if err != nil {

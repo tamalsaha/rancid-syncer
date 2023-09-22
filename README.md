@@ -63,3 +63,6 @@ ignoreNamespaceSelectors is always `true` for Project Promethues. So, we have to
 - https://github.com/prometheus/prometheus/blob/86729d4d7b8659e2b90fa65ae2d42ecddc3657bc/discovery/kubernetes/kubernetes.go#L253
 
 - https://github.com/prometheus/prometheus/blob/86729d4d7b8659e2b90fa65ae2d42ecddc3657bc/discovery/kubernetes/kubernetes.go#L201
+
+- `External Name` service will not work
+https://github.com/prometheus-operator/prometheus-operator/issues/3020

@@ -69,13 +69,13 @@ func ListProjectNamespaces(kc client.Client, seedNS string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	projectId, found := seed.Labels[clustermeta.LabelKeyRancherProjectId]
+	projectId, found := seed.Labels[clustermeta.LabelKeyRancherFieldProjectId]
 	if !found {
 		return nil, nil
 	}
 	var list core.NamespaceList
 	err = kc.List(context.TODO(), &list, client.MatchingLabels{
-		clustermeta.LabelKeyRancherProjectId: projectId,
+		clustermeta.LabelKeyRancherFieldProjectId: projectId,
 	})
 	if err != nil {
 		return nil, err

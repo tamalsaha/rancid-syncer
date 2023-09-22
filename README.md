@@ -48,6 +48,12 @@ Data Source {cluster-name}-{projctId}
 
 ## Service rbac
 
+```
+prometheus.prometheusSpec.ignoreNamespaceSelectors
+```
+ignoreNamespaceSelectors is always `true` for Project Promethues. So, we have to create fake Service without labels to work around it.
+
+
 - https://github.com/prometheus-operator/prometheus-operator/issues/5386
 
 - https://github.com/prometheus-operator/prometheus-operator/blob/7aa85a6f94dc5dbb41ba48fc27d9a255594e9e49/pkg/prometheus/promcfg.go#L1529-L1569

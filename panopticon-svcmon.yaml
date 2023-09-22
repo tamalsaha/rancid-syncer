@@ -1,0 +1,49 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  creationTimestamp: "2023-09-22T09:24:58Z"
+  generation: 4
+  labels:
+    app.kubernetes.io/instance: panopticon
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: panopticon
+    release: not-rancher-monitoring
+  name: panopticon
+  namespace: cattle-project-p-tkgpc-monitoring
+  ownerReferences:
+  - apiVersion: monitoring.coreos.com/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Prometheus
+    name: cattle-project-p-tkgpc-mon-prometheus
+    uid: 90603875-0ce6-4527-a4f0-4cad02a57cd3
+  resourceVersion: "1839829"
+  uid: 897270fe-222f-4819-a2de-8da98e40371d
+spec:
+  endpoints:
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    bearerTokenSecret:
+      key: ""
+    interval: 10s
+    port: api
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          key: tls.crt
+          name: panopticon-apiserver-cert
+      cert: {}
+      serverName: panopticon.monitoring.svc
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    bearerTokenSecret:
+      key: ""
+    interval: 10s
+    port: telemetry
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - cattle-project-p-tkgpc-monitoring
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: panopticon
+      app.kubernetes.io/name: panopticon

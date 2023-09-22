@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -75,8 +76,10 @@ func useKubebuilderClient() error {
 
 	_, err = Reconcile(context.TODO(), kc, ctrl.Request{
 		NamespacedName: types.NamespacedName{
-			Namespace: "kubeops",
-			Name:      "kube-ui-server",
+			Namespace: "monitoring",
+			Name:      "panopticon",
+			//Namespace: "kubeops",
+			//Name:      "kube-ui-server",
 		},
 	})
 	if err != nil {
@@ -108,6 +111,31 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
+	// secret
+	var srcSecrets []core.Secret
+	for i := range svcMon.Spec.Endpoints {
+		e := svcMon.Spec.Endpoints[i]
+
+		if e.TLSConfig != nil &&
+			e.TLSConfig.CA.Secret != nil &&
+			e.TLSConfig.CA.Secret.Name != "" {
+
+			key := client.ObjectKey{
+				Name:      e.TLSConfig.CA.Secret.Name,
+				Namespace: svcMon.Namespace,
+			}
+
+			var srcSecret core.Secret
+			err := kc.Get(context.TODO(), key, &srcSecret)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			srcSecrets = append(srcSecrets, srcSecret)
+
+			// copySecret(kc, e.TLSConfig.CA.Secret.Name, prom.Namespace)
+		}
+	}
+
 	var promList monitoringv1.PrometheusList
 	if err := kc.List(context.TODO(), &promList); err != nil {
 		log.Error(err, "unable to list Prometheus")
@@ -129,6 +157,12 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 				errList = append(errList, err)
 			}
 		} else {
+			for _, srcSecret := range srcSecrets {
+				if err := copySecret(kc, &srcSecret, prom.Namespace); err != nil {
+					errList = append(errList, err)
+				}
+			}
+
 			if err := copyServiceMonitor(kc, prom, &svcMon); err != nil {
 				errList = append(errList, err)
 			}
@@ -186,13 +220,13 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 	}
 	sort.Strings(namespaces)
 
-	cp := monitoringv1.ServiceMonitor{
+	target := monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      src.Name,
 			Namespace: prom.Namespace,
 		},
 	}
-	vt, err := cu.CreateOrPatch(context.TODO(), kc, &cp, func(in client.Object, createOp bool) client.Object {
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &target, func(in client.Object, createOp bool) client.Object {
 		obj := in.(*monitoringv1.ServiceMonitor)
 
 		ref := metav1.NewControllerRef(prom, schema.GroupVersionKind{
@@ -205,18 +239,23 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 		labels, _ := meta_util.LabelsForLabelSelector(prom.Spec.ServiceMonitorSelector)
 		obj.Labels = meta_util.OverwriteKeys(obj.Labels, labels)
 
-		obj.Spec = src.Spec
+		obj.Spec = *src.Spec.DeepCopy()
 
-		for i, e := range obj.Spec.Endpoints {
-			e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
-				{
-					Action:       "keep",
-					SourceLabels: []monitoringv1.LabelName{"namespace"},
-					Regex:        strings.Join(namespaces, "|"),
-				},
-			}, e.RelabelConfigs...)
+		keepNSMetrics := monitoringv1.RelabelConfig{
+			Action:       "keep",
+			SourceLabels: []monitoringv1.LabelName{"namespace"},
+			Regex:        strings.Join(namespaces, "|"),
+		}
 
-			obj.Spec.Endpoints[i] = e
+		for i := range obj.Spec.Endpoints {
+			e := obj.Spec.Endpoints[i]
+
+			if len(e.RelabelConfigs) == 0 || !reflect.DeepEqual(keepNSMetrics, *e.RelabelConfigs[0]) {
+				e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
+					&keepNSMetrics,
+				}, e.RelabelConfigs...)
+				obj.Spec.Endpoints[i] = e
+			}
 		}
 
 		return obj
@@ -224,6 +263,41 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 	if err != nil {
 		return err
 	}
-	klog.Infof("%s ServiceMonitor %s/%s", vt, cp.Namespace, cp.Name)
+	klog.Infof("%s ServiceMonitor %s/%s", vt, target.Namespace, target.Name)
+	return nil
+}
+
+func copySecret(kc client.Client, src *core.Secret, targetNS string) error {
+	target := core.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      src.Name,
+			Namespace: targetNS,
+		},
+		Immutable:  nil,
+		Data:       nil,
+		StringData: nil,
+		Type:       "",
+	}
+
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &target, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*core.Secret)
+
+		//ref := metav1.NewControllerRef(prom, schema.GroupVersionKind{
+		//	Group:   monitoring.GroupName,
+		//	Version: monitoringv1.Version,
+		//	Kind:    "Prometheus",
+		//})
+		//obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+		obj.Immutable = src.Immutable
+		obj.Data = src.Data
+		obj.Type = src.Type
+
+		return obj
+	})
+	if err != nil {
+		return err
+	}
+	klog.Infof("%s Secret %s/%s", vt, target.Namespace, target.Name)
 	return nil
 }

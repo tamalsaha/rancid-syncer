@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sort"
 	"strings"
 
-	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/errors"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -198,7 +198,7 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 		ref := metav1.NewControllerRef(prom, schema.GroupVersionKind{
 			Group:   monitoring.GroupName,
 			Version: monitoringv1.Version,
-			Kind:    "ServiceMonitor",
+			Kind:    "Prometheus",
 		})
 		obj.OwnerReferences = []metav1.OwnerReference{*ref}
 
@@ -207,7 +207,7 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 
 		obj.Spec = src.Spec
 
-		for _, e := range obj.Spec.Endpoints {
+		for i, e := range obj.Spec.Endpoints {
 			e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
 				{
 					Action:       "keep",
@@ -215,6 +215,8 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 					Regex:        strings.Join(namespaces, "|"),
 				},
 			}, e.RelabelConfigs...)
+
+			obj.Spec.Endpoints[i] = e
 		}
 
 		return obj

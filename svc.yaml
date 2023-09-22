@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-ui-server
+  namespace: cattle-project-p-tkgpc-monitoring
+spec:
+  endpoints:
+    - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      interval: 10s
+      port: api
+      relabelings:
+        - action: labeldrop
+          regex: (pod|service|endpoint)
+      scheme: https
+      tlsConfig:
+        ca:
+          secret:
+            key: tls.crt
+            name: kube-ui-server-apiserver-cert
+        serverName: kube-ui-server.kubeops.svc
+    - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      interval: 10s
+      port: telemetry
+      scheme: http
+  namespaceSelector:
+    matchNames:
+      - kubeops
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: kube-ui-server
+      app.kubernetes.io/name: kube-ui-server

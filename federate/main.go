@@ -3,10 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
+	core "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/klog/v2"
+	cu "kmodules.xyz/client-go/client"
 	clustermeta "kmodules.xyz/client-go/cluster"
+	meta_util "kmodules.xyz/client-go/meta"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sort"
+	"strings"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -98,17 +108,6 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	if yes, err := clustermeta.IsInSystemProject(kc, req.Namespace); err != nil {
-		log.Error(err, "unable to detect if in system project")
-		return ctrl.Result{}, err
-	} else if !yes {
-		// return error?
-		log.Info("can't federate service monitor that is not part of the system project")
-		return ctrl.Result{}, nil
-	}
-
-	sysProjectId, err := clustermeta.GetSystemProjectId(kc)
-
 	var promList monitoringv1.PrometheusList
 	if err := kc.List(context.TODO(), &promList); err != nil {
 		log.Error(err, "unable to list Prometheus")
@@ -117,22 +116,88 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 
 	var errList []error
 	for _, prom := range promList.Items {
-		siblings, err := clustermeta.AreSiblingNamespaces(kc, req.Namespace, prom.Namespace)
-		if err != nil {
-			errList = append(errList, err)
-			continue
-			// return ctrl.Result{}, err // should we do rest of the loop?
+		if !IsDefaultPrometheus(prom) && prom.Namespace == req.Namespace {
+			err := fmt.Errorf("federated service monitor can't be in the same namespace with project Prometheus %s/%s", prom.Namespace, prom.Namespace)
+			log.Error(err, "bad service monitor")
+			return ctrl.Result{}, nil // don't retry until svcmon changes
 		}
-		if siblings {
-			continue
-		}
-		syncServiceMonitor(kc, prom, &svcMon)
 
+		if err := syncServiceMonitor(kc, prom, &svcMon); err != nil {
+			errList = append(errList, err)
+		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, errors.NewAggregate(errList)
+}
+
+func IsDefaultPrometheus(prom *monitoringv1.Prometheus) bool {
+	expected := client.ObjectKey{
+		Namespace: "cattle-monitoring-system",
+		Name:      "rancher-monitoring-prometheus",
+	}
+	pk := client.ObjectKeyFromObject(prom)
+	return pk == expected
 }
 
 func syncServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *monitoringv1.ServiceMonitor) error {
+	sel, err := metav1.LabelSelectorAsSelector(prom.Spec.ServiceMonitorNamespaceSelector)
+	if err != nil {
+		return err
+	}
 
+	var nsList core.NamespaceList
+	err = kc.List(context.TODO(), &nsList, client.MatchingLabelsSelector{
+		Selector: sel,
+	})
+	if err != nil {
+		return err
+	}
+
+	namespaces := make([]string, 0, len(nsList.Items))
+	for _, ns := range nsList.Items {
+		if ns.Name == fmt.Sprintf("cattle-project-%s", ns.Labels[clustermeta.LabelKeyRancherFieldProjectId]) {
+			continue
+		}
+		namespaces = append(namespaces, ns.Name)
+	}
+	sort.Strings(namespaces)
+
+	cp := monitoringv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      src.Name,
+			Namespace: prom.Namespace,
+		},
+	}
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, &cp, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*monitoringv1.ServiceMonitor)
+
+		ref := metav1.NewControllerRef(prom, schema.GroupVersionKind{
+			Group:   monitoring.GroupName,
+			Version: monitoringv1.Version,
+			Kind:    "ServiceMonitor",
+		})
+		obj.OwnerReferences = []metav1.OwnerReference{*ref}
+
+		labels, _ := meta_util.LabelsForLabelSelector(prom.Spec.ServiceMonitorSelector)
+		obj.Labels = meta_util.OverwriteKeys(obj.Labels, labels)
+
+		obj.Spec = src.Spec
+
+		for _, e := range obj.Spec.Endpoints {
+			e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
+				{
+					Action:       "keep",
+					SourceLabels: []monitoringv1.LabelName{"namespace"},
+					Regex:        strings.Join(namespaces, "|"),
+				},
+			}, e.RelabelConfigs...)
+		}
+
+		return obj
+	})
+	if err != nil {
+		return err
+	}
+	klog.Infof("%s ServiceMonitor %s/%s", vt, cp.Namespace, cp.Name)
+	return nil
 }

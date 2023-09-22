@@ -153,7 +153,7 @@ func LoadPresetValues(kc client.Client, ref chartsapi.ChartPresetFlatRef) ([]Cha
 		if err != nil {
 			return nil, err
 		}
-		projectId, found := ns.Labels[clustermeta.LabelKeyRancherProjectId]
+		projectId, found := ns.Labels[clustermeta.LabelKeyRancherFieldProjectId]
 		if !found {
 			// NS not in a project. So, just add the extra CCPs
 			ccps, err := bundleClusterChartPresets(kc, sel, knownPresets)
@@ -166,7 +166,7 @@ func LoadPresetValues(kc client.Client, ref chartsapi.ChartPresetFlatRef) ([]Cha
 
 		var nsList core.NamespaceList
 		err := kc.List(context.TODO(), &nsList, client.MatchingLabels{
-			clustermeta.LabelKeyRancherProjectId: projectId,
+			clustermeta.LabelKeyRancherFieldProjectId: projectId,
 		})
 		if err != nil {
 			return nil, err

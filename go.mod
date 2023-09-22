@@ -17,7 +17,7 @@ require (
 	kmodules.xyz/client-go v0.25.34-0.20230921171922-af0189b22d8c
 	kmodules.xyz/custom-resources v0.25.2
 	kmodules.xyz/monitoring-agent-api v0.25.3-0.20230921024614-ff5edfe18660
-	kmodules.xyz/resource-metadata v0.17.18-0.20230921204413-a6a0c5117856
+	kmodules.xyz/resource-metadata v0.17.18-0.20230921230542-ac68abcecde2
 	sigs.k8s.io/controller-runtime v0.13.1
 	sigs.k8s.io/yaml v1.3.0
 	x-helm.dev/apimachinery v0.0.11-0.20230920073953-6834648fee5b

@@ -116,14 +116,22 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 
 	var errList []error
 	for _, prom := range promList.Items {
-		if !IsDefaultPrometheus(prom) && prom.Namespace == req.Namespace {
+		isDefault := IsDefaultPrometheus(prom)
+
+		if !isDefault && prom.Namespace == req.Namespace {
 			err := fmt.Errorf("federated service monitor can't be in the same namespace with project Prometheus %s/%s", prom.Namespace, prom.Namespace)
 			log.Error(err, "bad service monitor")
 			return ctrl.Result{}, nil // don't retry until svcmon changes
 		}
 
-		if err := syncServiceMonitor(kc, prom, &svcMon); err != nil {
-			errList = append(errList, err)
+		if isDefault {
+			if err := updateServiceMonitorLabels(kc, prom, &svcMon); err != nil {
+				errList = append(errList, err)
+			}
+		} else {
+			if err := copyServiceMonitor(kc, prom, &svcMon); err != nil {
+				errList = append(errList, err)
+			}
 		}
 	}
 
@@ -139,7 +147,23 @@ func IsDefaultPrometheus(prom *monitoringv1.Prometheus) bool {
 	return pk == expected
 }
 
-func syncServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *monitoringv1.ServiceMonitor) error {
+func updateServiceMonitorLabels(kc client.Client, prom *monitoringv1.Prometheus, src *monitoringv1.ServiceMonitor) error {
+	vt, err := cu.CreateOrPatch(context.TODO(), kc, src, func(in client.Object, createOp bool) client.Object {
+		obj := in.(*monitoringv1.ServiceMonitor)
+
+		labels, _ := meta_util.LabelsForLabelSelector(prom.Spec.ServiceMonitorSelector)
+		obj.Labels = meta_util.OverwriteKeys(obj.Labels, labels)
+
+		return obj
+	})
+	if err != nil {
+		return err
+	}
+	klog.Infof("%s ServiceMonitor %s/%s", vt, src.Namespace, src.Name)
+	return nil
+}
+
+func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *monitoringv1.ServiceMonitor) error {
 	sel, err := metav1.LabelSelectorAsSelector(prom.Spec.ServiceMonitorNamespaceSelector)
 	if err != nil {
 		return err

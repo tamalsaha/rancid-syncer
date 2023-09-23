@@ -7,6 +7,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sort"
 	"strings"
 )
@@ -457,4 +459,60 @@ func UpsertEndpointPort(ports []core.EndpointPort, x core.EndpointPort) []core.E
 		Name: x.Name,
 		Port: x.Port,
 	})
+}
+
+// service -> []serviceMonitors
+func ServiceMonitorsForService(kc client.Client, obj client.Object) []reconcile.Request {
+	var list monitoringv1.ServiceMonitorList
+	err := kc.List(context.TODO(), &list, client.MatchingLabels{
+		mona.FederatedKey: "true",
+	})
+	if err != nil {
+		klog.Error(err)
+		return nil
+	}
+
+	var req []reconcile.Request
+	for _, svcMon := range list.Items {
+		nsMatches := svcMon.Spec.NamespaceSelector.Any ||
+			contains(svcMon.Spec.NamespaceSelector.MatchNames, obj.GetNamespace())
+		if !nsMatches {
+			continue
+		}
+		sel, err := metav1.LabelSelectorAsSelector(&svcMon.Spec.Selector)
+		if err != nil {
+			return nil
+		}
+		if sel.Matches(labels.Set(obj.GetLabels())) {
+			req = append(req, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(svcMon)})
+		}
+	}
+	return req
+}
+
+// Prometheus -> serviceMonitor
+func ServiceMonitorsForPrometheus(kc client.Client, obj client.Object) []reconcile.Request {
+	var list monitoringv1.ServiceMonitorList
+	err := kc.List(context.TODO(), &list, client.MatchingLabels{
+		mona.FederatedKey: "true",
+	})
+	if err != nil {
+		klog.Error(err)
+		return nil
+	}
+
+	var req []reconcile.Request
+	for _, svcMon := range list.Items {
+		req = append(req, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(svcMon)})
+	}
+	return req
+}
+
+func contains(arr []string, x string) bool {
+	for _, s := range arr {
+		if s == x {
+			return true
+		}
+	}
+	return false
 }

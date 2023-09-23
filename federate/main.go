@@ -152,8 +152,6 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 				return ctrl.Result{}, err
 			}
 			srcSecrets = append(srcSecrets, srcSecret)
-
-			// copySecret(kc, e.TLSConfig.CA.Secret.Name, prom.Namespace)
 		}
 	}
 
@@ -276,6 +274,7 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 
 		labels, _ := meta_util.LabelsForLabelSelector(prom.Spec.ServiceMonitorSelector)
 		obj.Labels = meta_util.OverwriteKeys(obj.Labels, labels)
+		delete(obj.Labels, mona.FederatedKey)
 
 		obj.Spec = *src.Spec.DeepCopy()
 

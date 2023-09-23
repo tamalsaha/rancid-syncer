@@ -1,0 +1,14 @@
+apiVersion: charts.x-helm.dev/v1alpha1
+kind: ChartPreset
+metadata:
+  name: capi-presets
+  namespace: cattle-project-p-tkgpc
+  labels:
+    charts.x-helm.dev/is-default-preset: "true"
+spec:
+  values:
+    form:
+      capi:
+        provider: "capa"
+        namespace: "capi-cluster"
+        clusterName: "mydbaas"

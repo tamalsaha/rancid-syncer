@@ -247,6 +247,7 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 	}
 
 	namespaces := make([]string, 0, len(nsList.Items))
+	namespaces = append(namespaces, "") // for non-namespaced resources
 	for _, ns := range nsList.Items {
 		if ns.Name == fmt.Sprintf("cattle-project-%s", ns.Labels[clustermeta.LabelKeyRancherFieldProjectId]) {
 			continue

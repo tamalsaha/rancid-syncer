@@ -66,3 +66,4 @@ ignoreNamespaceSelectors is always `true` for Project Promethues. So, we have to
 
 - `External Name` service will not work
 https://github.com/prometheus-operator/prometheus-operator/issues/3020
+

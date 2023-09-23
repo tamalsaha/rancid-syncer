@@ -286,10 +286,10 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 
 			e.HonorLabels = true // keep original labels
 
-			if len(e.RelabelConfigs) == 0 || !reflect.DeepEqual(keepNSMetrics, *e.RelabelConfigs[0]) {
-				e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
+			if len(e.MetricRelabelConfigs) == 0 || !reflect.DeepEqual(keepNSMetrics, *e.MetricRelabelConfigs[0]) {
+				e.MetricRelabelConfigs = append([]*monitoringv1.RelabelConfig{
 					&keepNSMetrics,
-				}, e.RelabelConfigs...)
+				}, e.MetricRelabelConfigs...)
 			}
 			obj.Spec.Endpoints[i] = e
 		}

@@ -21,11 +21,13 @@ import (
 	meta_util "kmodules.xyz/client-go/meta"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sort"
+	"strings"
 )
 
 func NewClient() (*rest.Config, versioned.Interface, client.Client, error) {
@@ -274,27 +276,21 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 
 		obj.Spec = *src.Spec.DeepCopy()
 
-		/*
-			keepNSMetrics := monitoringv1.RelabelConfig{
-				Action:       "keep",
-				SourceLabels: []monitoringv1.LabelName{"namespace"},
-				Regex:        strings.Join(namespaces, "|"),
-			}
-		*/
-
+		keepNSMetrics := monitoringv1.RelabelConfig{
+			Action:       "keep",
+			SourceLabels: []monitoringv1.LabelName{"namespace"},
+			Regex:        "(" + strings.Join(namespaces, "|") + ")",
+		}
 		for i := range obj.Spec.Endpoints {
 			e := obj.Spec.Endpoints[i]
 
 			e.HonorLabels = true // keep original labels
 
-			/*
-				if len(e.RelabelConfigs) == 0 || !reflect.DeepEqual(keepNSMetrics, *e.RelabelConfigs[0]) {
-					e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
-						&keepNSMetrics,
-					}, e.RelabelConfigs...)
-				}
-			*/
-
+			if len(e.RelabelConfigs) == 0 || !reflect.DeepEqual(keepNSMetrics, *e.RelabelConfigs[0]) {
+				e.RelabelConfigs = append([]*monitoringv1.RelabelConfig{
+					&keepNSMetrics,
+				}, e.RelabelConfigs...)
+			}
 			obj.Spec.Endpoints[i] = e
 		}
 

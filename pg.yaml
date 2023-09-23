@@ -2,7 +2,7 @@ apiVersion: kubedb.com/v1alpha2
 kind: Postgres
 metadata:
   name: quick-postgres
-  namespace: app-1-ns1
+  namespace: app-2-ns2
 spec:
   version: "13.2"
   storageType: Durable

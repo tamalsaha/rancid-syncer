@@ -104,8 +104,8 @@ func Reconcile(ctx context.Context, kc client.Client, req ctrl.Request) (ctrl.Re
 	}
 
 	// has federate label
-	val, found := svcMon.Labels[mona.FederatedKey]
-	if !found || val != "true" {
+	val, found := svcMon.Labels[mona.PrometheusKey]
+	if !found || val != mona.PrometheusValueFederated {
 		return ctrl.Result{}, nil
 	}
 
@@ -274,7 +274,7 @@ func copyServiceMonitor(kc client.Client, prom *monitoringv1.Prometheus, src *mo
 
 		labels, _ := meta_util.LabelsForLabelSelector(prom.Spec.ServiceMonitorSelector)
 		obj.Labels = meta_util.OverwriteKeys(obj.Labels, labels)
-		delete(obj.Labels, mona.FederatedKey)
+		delete(obj.Labels, mona.PrometheusKey)
 
 		obj.Spec = *src.Spec.DeepCopy()
 
@@ -464,7 +464,7 @@ func UpsertEndpointPort(ports []core.EndpointPort, x core.EndpointPort) []core.E
 func ServiceMonitorsForService(kc client.Client, obj client.Object) []reconcile.Request {
 	var list monitoringv1.ServiceMonitorList
 	err := kc.List(context.TODO(), &list, client.MatchingLabels{
-		mona.FederatedKey: "true",
+		mona.PrometheusKey: mona.PrometheusValueFederated,
 	})
 	if err != nil {
 		klog.Error(err)
@@ -493,7 +493,7 @@ func ServiceMonitorsForService(kc client.Client, obj client.Object) []reconcile.
 func ServiceMonitorsForPrometheus(kc client.Client, obj client.Object) []reconcile.Request {
 	var list monitoringv1.ServiceMonitorList
 	err := kc.List(context.TODO(), &list, client.MatchingLabels{
-		mona.FederatedKey: "true",
+		mona.PrometheusKey: mona.PrometheusValueFederated,
 	})
 	if err != nil {
 		klog.Error(err)

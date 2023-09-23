@@ -16,7 +16,7 @@ require (
 	k8s.io/klog/v2 v2.80.1
 	kmodules.xyz/client-go v0.25.34
 	kmodules.xyz/custom-resources v0.25.2
-	kmodules.xyz/monitoring-agent-api v0.25.3
+	kmodules.xyz/monitoring-agent-api v0.25.4
 	kmodules.xyz/resource-metadata v0.17.18
 	sigs.k8s.io/controller-runtime v0.13.1
 	sigs.k8s.io/yaml v1.3.0

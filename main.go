@@ -3,6 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -31,17 +36,14 @@ import (
 	meta_util "kmodules.xyz/client-go/meta"
 	appcatalog "kmodules.xyz/custom-resources/apis/appcatalog/v1alpha1"
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
+	rscoreapi "kmodules.xyz/resource-metadata/apis/core/v1alpha1"
 	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
 	"kmodules.xyz/resource-metadata/apis/shared"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/yaml"
-	"sort"
-	"strings"
-	"time"
 	chartsapi "x-helm.dev/apimachinery/apis/charts/v1alpha1"
 )
 
@@ -502,26 +504,6 @@ func GeneratePresetForPrometheus(p monitoringv1.Prometheus) mona.MonitoringPrese
 	return preset
 }
 
-/*
-app.kubernetes.io/instance: kube-prometheus-stack
-app.kubernetes.io/managed-by: Helm
-app.kubernetes.io/part-of: kube-prometheus-stack
-*/
-func FindSiblingAlertManagerForPrometheus(kc client.Client, key types.NamespacedName) (*monitoringv1.Alertmanager, error) {
-	var list monitoringv1.AlertmanagerList
-	err := kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
-	if err != nil {
-		return nil, err
-	}
-	if len(list.Items) > 1 {
-		klog.Warningln("multiple alert manager found in namespace %s", key.Namespace)
-	}
-	if len(list.Items) == 0 {
-		return nil, nil
-	}
-	return &list.Items[0], nil
-}
-
 func CreatePrometheusAppBinding(kc client.Client, p *monitoringv1.Prometheus, svc *core.Service) (kutil.VerbType, error) {
 	ab := appcatalog.AppBinding{
 		TypeMeta: metav1.TypeMeta{},
@@ -708,7 +690,7 @@ status:
 
 */
 
-func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
+func ListRancherProjects(kc client.Client) ([]rscoreapi.Project, error) {
 	var list core.NamespaceList
 	err := kc.List(context.TODO(), &list)
 	if meta.IsNoMatchError(err) {
@@ -717,7 +699,7 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		return nil, err
 	}
 
-	projects := map[string]rsapi.Project{}
+	projects := map[string]rscoreapi.Project{}
 	now := time.Now()
 	for _, ns := range list.Items {
 		projectId, exists := ns.Labels[clustermeta.LabelKeyRancherFieldProjectId]
@@ -727,7 +709,7 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 
 		project, exists := projects[projectId]
 		if !exists {
-			project = rsapi.Project{
+			project = rscoreapi.Project{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              projectId,
 					CreationTimestamp: metav1.NewTime(now),
@@ -736,8 +718,8 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 						clustermeta.LabelKeyRancherFieldProjectId: projectId,
 					},
 				},
-				Spec: rsapi.ProjectSpec{
-					Type:       rsapi.ProjectUser,
+				Spec: rscoreapi.ProjectSpec{
+					Type:       rscoreapi.ProjectUser,
 					Namespaces: nil,
 					NamespaceSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
@@ -746,7 +728,6 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 					},
 				},
 			}
-
 		}
 
 		if ns.CreationTimestamp.Before(&project.CreationTimestamp) {
@@ -754,9 +735,9 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		}
 
 		if ns.Name == metav1.NamespaceDefault {
-			project.Spec.Type = rsapi.ProjectDefault
+			project.Spec.Type = rscoreapi.ProjectDefault
 		} else if ns.Name == metav1.NamespaceSystem {
-			project.Spec.Type = rsapi.ProjectSystem
+			project.Spec.Type = rscoreapi.ProjectSystem
 		}
 		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
 
@@ -771,25 +752,45 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 				hasUseNs = true
 			}
 
-			var presetList chartsapi.ChartPresetList
-			err := kc.List(context.TODO(), &presetList, client.InNamespace(ns))
-			if err != nil && !meta.IsNoMatchError(err) {
-				return nil, err
-			}
-			for _, x := range presetList.Items {
-				presets = append(presets, rsapi.SourceLocator{
-					Resource: kmapi.ResourceID{
-						Group:   chartsapi.GroupVersion.Group,
-						Version: chartsapi.GroupVersion.Version,
-						Name:    "",
-						Kind:    chartsapi.ResourceKindChartPreset,
-						Scope:   "",
-					},
-					Ref: kmapi.ObjectReference{
-						Namespace: x.Namespace,
-						Name:      x.Name,
-					},
-				})
+			if prj.Spec.Type == rscoreapi.ProjectSystem {
+				if ns == metav1.NamespaceSystem {
+					var ccps chartsapi.ClusterChartPresetList
+					err := kc.List(context.TODO(), &ccps)
+					if err != nil && !meta.IsNoMatchError(err) {
+						return nil, err
+					}
+					for _, x := range ccps.Items {
+						presets = append(presets, shared.SourceLocator{
+							Resource: kmapi.ResourceID{
+								Group:   chartsapi.GroupVersion.Group,
+								Version: chartsapi.GroupVersion.Version,
+								Kind:    chartsapi.ResourceKindClusterChartPreset,
+							},
+							Ref: kmapi.ObjectReference{
+								Name: x.Name,
+							},
+						})
+					}
+				}
+			} else {
+				var cps chartsapi.ChartPresetList
+				err := kc.List(context.TODO(), &cps, client.InNamespace(ns))
+				if err != nil && !meta.IsNoMatchError(err) {
+					return nil, err
+				}
+				for _, x := range cps.Items {
+					presets = append(presets, shared.SourceLocator{
+						Resource: kmapi.ResourceID{
+							Group:   chartsapi.GroupVersion.Group,
+							Version: chartsapi.GroupVersion.Version,
+							Kind:    chartsapi.ResourceKindChartPreset,
+						},
+						Ref: kmapi.ObjectReference{
+							Name:      x.Name,
+							Namespace: x.Namespace,
+						},
+					})
+				}
 			}
 		}
 
@@ -842,7 +843,7 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 			}
 
 			if prj.Spec.Monitoring == nil {
-				prj.Spec.Monitoring = &rsapi.ProjectMonitoring{}
+				prj.Spec.Monitoring = &rscoreapi.ProjectMonitoring{}
 			}
 			prj.Spec.Monitoring.PrometheusRef = &kmapi.ObjectReference{
 				Namespace: prom.Namespace,
@@ -876,11 +877,26 @@ func ListRancherProjects(kc client.Client) ([]rsapi.Project, error) {
 		}
 	}
 
-	result := make([]rsapi.Project, 0, len(projects))
+	result := make([]rscoreapi.Project, 0, len(projects))
 	for _, p := range projects {
 		result = append(result, p)
 	}
 	return result, nil
+}
+
+func FindSiblingAlertManagerForPrometheus(kc client.Client, key types.NamespacedName) (*monitoringv1.Alertmanager, error) {
+	var list monitoringv1.AlertmanagerList
+	err := kc.List(context.TODO(), &list, client.InNamespace(key.Namespace))
+	if err != nil {
+		return nil, err
+	}
+	if len(list.Items) > 1 {
+		klog.Warningln("multiple alert manager found in namespace %s", key.Namespace)
+	}
+	if len(list.Items) == 0 {
+		return nil, nil
+	}
+	return &list.Items[0], nil
 }
 
 func DetectProjectMonitoringURLs(kc client.Client, promNS string) (alertmanagerURL, grafanaURL, prometheusURL string) {
@@ -902,52 +918,15 @@ func DetectProjectMonitoringURLs(kc client.Client, promNS string) (alertmanagerU
 	return
 }
 
-func GetRancherProject(kc client.Client, projectId string) (*rsapi.Project, error) {
-	// FIX
-	var gr schema.GroupResource
-
-	var list core.NamespaceList
-	err := kc.List(context.TODO(), &list, client.MatchingLabels{
-		clustermeta.LabelKeyRancherFieldProjectId: projectId,
-	})
+func GetRancherProject(kc client.Client, projectId string) (*rscoreapi.Project, error) {
+	projects, err := ListRancherProjects(kc)
 	if err != nil {
 		return nil, err
-	} else if len(list.Items) == 0 {
-		return nil, apierrors.NewNotFound(gr, projectId)
 	}
-
-	now := time.Now()
-	project := rsapi.Project{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              projectId,
-			CreationTimestamp: metav1.NewTime(now),
-			UID:               types.UID(uuid.Must(uuid.NewUUID()).String()),
-			Labels: map[string]string{
-				clustermeta.LabelKeyRancherFieldProjectId: projectId,
-			},
-		},
-		Spec: rsapi.ProjectSpec{
-			Type:       rsapi.ProjectUser,
-			Namespaces: nil,
-			NamespaceSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					clustermeta.LabelKeyRancherFieldProjectId: projectId,
-				},
-			},
-		},
-	}
-	for _, ns := range list.Items {
-		if ns.CreationTimestamp.Before(&project.CreationTimestamp) {
-			project.CreationTimestamp = ns.CreationTimestamp
+	for _, prj := range projects {
+		if prj.Name == projectId {
+			return &prj, nil
 		}
-
-		if ns.Name == metav1.NamespaceDefault {
-			project.Spec.Type = rsapi.ProjectDefault
-		} else if ns.Name == metav1.NamespaceSystem {
-			project.Spec.Type = rsapi.ProjectSystem
-		}
-		project.Spec.Namespaces = append(project.Spec.Namespaces, ns.Name)
 	}
-
-	return &project, nil
+	return nil, apierrors.NewNotFound(gr, projectId)
 }

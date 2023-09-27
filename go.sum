@@ -862,8 +862,8 @@ k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 h1:+70TFaan3hfJzs+7VK2o+O
 k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280/go.mod h1:+Axhij7bCpeqhklhUTe3xmOn6bWxolyZEeyaFpjGtl4=
 k8s.io/utils v0.0.0-20221108210102-8e77b1f39fe2 h1:GfD9OzL11kvZN5iArC6oTS7RTj7oJOIfnislxYlqTj8=
 k8s.io/utils v0.0.0-20221108210102-8e77b1f39fe2/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
-kmodules.xyz/client-go v0.25.34 h1:4/98dzHp9J/sWxu5YJc37HuHBemmdlVniEDOWhWS4OE=
-kmodules.xyz/client-go v0.25.34/go.mod h1:YfMtano/sAxZqhoxtLKjvclWtNQQIa6PmkVaooo+VuI=
+kmodules.xyz/client-go v0.25.37 h1:/pKNG5ktBxGPtbTD1SIyAksLgZi1tqAPDJj9AwDkV8o=
+kmodules.xyz/client-go v0.25.37/go.mod h1:YfMtano/sAxZqhoxtLKjvclWtNQQIa6PmkVaooo+VuI=
 kmodules.xyz/custom-resources v0.25.2 h1:+PJgUZvbbSgyNT7EX9gUZ3PIzY2LAW03TDW8cevvXqo=
 kmodules.xyz/custom-resources v0.25.2/go.mod h1:b9XjjKQMZ6KrLHXKqQz7YwV3M3BK8Hwi4KEwu5RadCo=
 kmodules.xyz/monitoring-agent-api v0.25.4 h1:OwkvtV23QhUy3f7o9lxPWaAW3jiJMGAMPPRFGhoqDAs=

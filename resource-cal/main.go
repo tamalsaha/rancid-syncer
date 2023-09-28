@@ -308,14 +308,13 @@ func AddResourceList(x, y core.ResourceList) core.ResourceList {
 	}
 
 	result := core.ResourceList{}
-
 	for _, fullName := range names.UnsortedList() {
 		_, name, found := strings.Cut(fullName, ".")
 		var rf resource.Format
 		if found {
-			rf = RF(core.ResourceName(name))
+			rf = resourceFormat(core.ResourceName(name))
 		} else {
-			rf = RF(core.ResourceName(fullName))
+			rf = resourceFormat(core.ResourceName(fullName))
 		}
 
 		sum := resource.Quantity{Format: rf}
@@ -328,7 +327,7 @@ func AddResourceList(x, y core.ResourceList) core.ResourceList {
 	return result
 }
 
-func RF(name core.ResourceName) resource.Format {
+func resourceFormat(name core.ResourceName) resource.Format {
 	switch name {
 	case core.ResourceCPU:
 		return resource.DecimalSI

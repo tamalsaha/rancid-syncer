@@ -27,6 +27,7 @@ import (
 func NewClient() (discovery.DiscoveryInterface, client.Client, error) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
 
 	ctrl.SetLogger(klogr.New())
 	cfg := ctrl.GetConfigOrDie()

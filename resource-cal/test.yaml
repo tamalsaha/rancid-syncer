@@ -14,4 +14,7 @@ spec:
   - group: kubedb.com
     kind: Postgres
     hard:
+      limits.memory: 5Gi
+  - group: kubedb.com
+    hard:
       limits.memory: 10Gi

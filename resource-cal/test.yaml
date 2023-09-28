@@ -5,7 +5,7 @@ metadata:
     field.cattle.io/projectId: p-demo
   name: demo
 ---
-apiVersion: management.k8s.appcode.com/v1alpha1
+apiVersion: management.k8s.appscode.com/v1alpha1
 kind: ProjectQuota
 metadata:
   name: p-demo

@@ -62,20 +62,38 @@ func main() {
 
 func useKubebuilderClient() error {
 	fmt.Println("Using kubebuilder client")
-	disc, _, err := NewClient()
+	disc, kc, err := NewClient()
 	if err != nil {
 		return err
 	}
 
-	apiTypes, err := ListKinds(disc)
+	var pj v1alpha1.ProjectQuota
+	err = kc.Get(context.TODO(), client.ObjectKey{Name: "p-demo"}, &pj)
 	if err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(apiTypes)
+
+	out, err := CalculateStatus(disc, kc, &pj)
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(out)
 	if err != nil {
 		return err
 	}
 	fmt.Println(string(data))
+
+	/*
+		apiTypes, err := ListKinds(disc)
+		if err != nil {
+			return err
+		}
+		data, err := yaml.Marshal(apiTypes)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(data))
+	*/
 
 	return nil
 }

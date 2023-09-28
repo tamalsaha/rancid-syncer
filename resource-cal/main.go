@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2/klogr"
 	"kmodules.xyz/apiversion"
+	clustermeta "kmodules.xyz/client-go/cluster"
+	"kmodules.xyz/resource-metadata/apis/management/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -79,8 +83,8 @@ type APIType struct {
 	Versions []string
 }
 
-func ListKinds(c discovery.DiscoveryInterface) (map[string]APIType, error) {
-	_, resourceList, err := c.ServerGroupsAndResources()
+func ListKinds(disc discovery.DiscoveryInterface) (map[string]APIType, error) {
+	_, resourceList, err := disc.ServerGroupsAndResources()
 
 	apiTypes := map[string]APIType{}
 	if discovery.IsGroupDiscoveryFailedError(err) || err == nil {
@@ -124,4 +128,43 @@ func ListKinds(c discovery.DiscoveryInterface) (map[string]APIType, error) {
 	}
 
 	return apiTypes, nil
+}
+
+func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1alpha1.ProjectQuota) (*v1alpha1.ProjectQuota, error) {
+	var nsList core.NamespaceList
+	err := kc.List(context.TODO(), &nsList, client.MatchingLabels{
+		clustermeta.LabelKeyRancherFieldProjectId: in.Name,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	apiTypes, err := ListKinds(disc)
+	if err != nil {
+		return nil, err
+	}
+
+	// init status
+	in.Status.Quotas = make([]v1alpha1.ResourceQuotaStatus, len(in.Spec.Quotas))
+	for i := range in.Spec.Quotas {
+		in.Status.Quotas[i] = v1alpha1.ResourceQuotaStatus{
+			ResourceQuotaSpec: in.Spec.Quotas[i],
+			Used:              core.ResourceList{},
+		}
+	}
+
+	used := map[schema.GroupKind]core.ResourceList{}
+
+	for _, ns := range nsList.Items {
+
+	}
+
+	/*
+		GK
+		G
+		Group = "" Kind= ?
+
+	*/
+
+	return in, nil
 }

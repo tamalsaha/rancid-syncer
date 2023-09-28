@@ -79,10 +79,10 @@ type APIType struct {
 	Versions []string
 }
 
-func ListKinds(c discovery.DiscoveryInterface, group string) (map[schema.GroupKind]APIType, error) {
+func ListKinds(c discovery.DiscoveryInterface, group string) (map[string]APIType, error) {
 	_, resourceList, err := c.ServerGroupsAndResources()
 
-	apiTypes := map[schema.GroupKind]APIType{}
+	apiTypes := map[string]APIType{}
 	if discovery.IsGroupDiscoveryFailedError(err) || err == nil {
 		for _, resources := range resourceList {
 			gv, err := schema.ParseGroupVersion(resources.GroupVersion)
@@ -94,33 +94,36 @@ func ListKinds(c discovery.DiscoveryInterface, group string) (map[schema.GroupKi
 			}
 			for _, resource := range resources.APIResources {
 				gk := schema.GroupKind{
-					Group: group,
+					Group: gv.Group,
 					Kind:  resource.Kind,
 				}
-				x, found := apiTypes[gk]
+				x, found := apiTypes[gk.String()]
 				if !found {
-					apiTypes[gk] = APIType{
-						Group:    group,
+					x = APIType{
+						Group:    gv.Group,
 						Kind:     resource.Kind,
 						Resource: resource.Name,
-						Versions: []string{resource.Version},
+						Versions: []string{gv.Version},
 					}
 				} else {
-					x.Versions = append(x.Versions, resource.Version)
-					apiTypes[gk] = x
+					x.Versions = append(x.Versions, gv.Version)
 				}
+				apiTypes[gk.String()] = x
 			}
 		}
 	}
 
-	for gk, x := range apiTypes {
-		if len(x.Versions) > 1 {
-			sort.Slice(x.Versions, func(i, j int) bool {
-				return apiversion.MustCompare(x.Versions[i], x.Versions[j]) > 0
-			})
-			apiTypes[gk] = x
+	/*
+		for gk, x := range apiTypes {
+			if len(x.Versions) > 1 {
+				sort.Slice(x.Versions, func(i, j int) bool {
+					return apiversion.MustCompare(x.Versions[i], x.Versions[j]) > 0
+				})
+				apiTypes[gk] = x
+			}
 		}
-	}
+
+	*/
 
 	return apiTypes, nil
 }

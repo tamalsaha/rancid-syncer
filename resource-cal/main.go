@@ -265,9 +265,17 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 		}
 	}
 	if !done {
-		// Todo:
-		// Don't error out
-		return nil, fmt.Errorf("resource calculator not defined for %+v", gk)
+		var list unstructured.UnstructuredList
+		list.SetGroupVersionKind(gk.WithVersion(typeInfo.Versions[0]))
+		err := kc.List(context.TODO(), &list, client.InNamespace(ns))
+		if err != nil {
+			return nil, err
+		}
+		if len(list.Items) > 0 {
+			// Todo:
+			// Don't error out
+			return nil, fmt.Errorf("resource calculator not defined for %+v", gk)
+		}
 	}
 	return used, nil
 }

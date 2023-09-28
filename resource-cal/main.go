@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sort"
 	"strings"
 
@@ -205,7 +207,7 @@ func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1
 							}
 							nsUsed[gk] = used
 						}
-						quota.Used = api.AddResourceList(quota.Used, used)
+						quota.Used = AddResourceList(quota.Used, used)
 					}
 				}
 			} else {
@@ -218,7 +220,7 @@ func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1
 					return nil, err
 				}
 				nsUsed[gk] = used
-				quota.Used = api.AddResourceList(quota.Used, used)
+				quota.Used = AddResourceList(quota.Used, used)
 			}
 
 			in.Status.Quotas[i] = quota
@@ -255,11 +257,27 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 			}
 
 			for _, obj := range list.Items {
-				limits, err := resourcemetrics.AppResourceLimits(obj.UnstructuredContent())
+				content := obj.UnstructuredContent()
+
+				usage := core.ResourceList{}
+
+				// https://kubernetes.io/docs/concepts/policy/resource-quotas/#compute-resource-quota
+				requests, err := resourcemetrics.AppResourceRequests(content)
 				if err != nil {
 					return nil, err
 				}
-				used = api.AddResourceList(used, limits)
+				for k, v := range requests {
+					usage["requests."+k] = v
+				}
+				limits, err := resourcemetrics.AppResourceLimits(content)
+				if err != nil {
+					return nil, err
+				}
+				for k, v := range limits {
+					usage["limits."+k] = v
+				}
+
+				used = AddResourceList(used, usage)
 			}
 			break
 		}
@@ -278,4 +296,50 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 		}
 	}
 	return used, nil
+}
+
+func AddResourceList(x, y core.ResourceList) core.ResourceList {
+	names := sets.NewString()
+	for k := range x {
+		names.Insert(string(k))
+	}
+	for k := range y {
+		names.Insert(string(k))
+	}
+
+	result := core.ResourceList{}
+
+	for _, fullName := range names.UnsortedList() {
+		_, name, found := strings.Cut(fullName, ".")
+		var rf resource.Format
+		if found {
+			rf = RF(core.ResourceName(name))
+		} else {
+			rf = RF(core.ResourceName(fullName))
+		}
+
+		sum := resource.Quantity{Format: rf}
+		sum.Add(*x.Name(core.ResourceName(fullName), rf))
+		sum.Add(*y.Name(core.ResourceName(fullName), rf))
+		if !sum.IsZero() {
+			result[core.ResourceName(fullName)] = sum
+		}
+	}
+	return result
+}
+
+func RF(name core.ResourceName) resource.Format {
+	switch name {
+	case core.ResourceCPU:
+		return resource.DecimalSI
+	case core.ResourceMemory:
+		return resource.BinarySI
+	case core.ResourceStorage:
+		return resource.BinarySI
+	case core.ResourcePods:
+		return resource.DecimalSI
+	case core.ResourceEphemeralStorage:
+		return resource.BinarySI
+	}
+	return resource.BinarySI // panic ?
 }

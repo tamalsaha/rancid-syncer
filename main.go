@@ -931,3 +931,12 @@ func GetRancherProject(kc client.Client, projectId string) (*rscoreapi.Project, 
 	}
 	return nil, apierrors.NewNotFound(gr, projectId)
 }
+
+func FindServiceForPrometheus2(kc client.Client, prom *monitoringv1.Prometheus) (*core.Service, error) {
+	var svc core.Service
+	err := kc.Get(context.TODO(), client.ObjectKeyFromObject(prom), &svc)
+	if err != nil {
+		return nil, err
+	}
+	return &svc, nil
+}

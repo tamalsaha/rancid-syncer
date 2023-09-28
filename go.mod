@@ -14,6 +14,7 @@ require (
 	k8s.io/apimachinery v0.25.4
 	k8s.io/client-go v0.25.4
 	k8s.io/klog/v2 v2.80.1
+	kmodules.xyz/apiversion v0.2.0
 	kmodules.xyz/client-go v0.25.37
 	kmodules.xyz/custom-resources v0.25.2
 	kmodules.xyz/monitoring-agent-api v0.25.4

@@ -683,6 +683,9 @@ k8s.io/utils/net
 k8s.io/utils/pointer
 k8s.io/utils/strings/slices
 k8s.io/utils/trace
+# kmodules.xyz/apiversion v0.2.0
+## explicit; go 1.14
+kmodules.xyz/apiversion
 # kmodules.xyz/client-go v0.25.37
 ## explicit; go 1.18
 kmodules.xyz/client-go

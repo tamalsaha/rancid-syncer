@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -12,6 +13,8 @@ import (
 	"kmodules.xyz/apiversion"
 	clustermeta "kmodules.xyz/client-go/cluster"
 	"kmodules.xyz/resource-metadata/apis/management/v1alpha1"
+	resourcemetrics "kmodules.xyz/resource-metrics"
+	"kmodules.xyz/resource-metrics/api"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -77,12 +80,14 @@ func useKubebuilderClient() error {
 }
 
 type APIType struct {
-	Group    string
-	Kind     string
-	Resource string
-	Versions []string
+	Group      string
+	Kind       string
+	Resource   string
+	Versions   []string
+	Namespaced bool
 }
 
+// handle non-namespaced resource limits
 func ListKinds(disc discovery.DiscoveryInterface) (map[string]APIType, error) {
 	_, resourceList, err := disc.ServerGroupsAndResources()
 
@@ -105,10 +110,11 @@ func ListKinds(disc discovery.DiscoveryInterface) (map[string]APIType, error) {
 				x, found := apiTypes[gk.String()]
 				if !found {
 					x = APIType{
-						Group:    gv.Group,
-						Kind:     resource.Kind,
-						Resource: resource.Name,
-						Versions: []string{gv.Version},
+						Group:      gv.Group,
+						Kind:       resource.Kind,
+						Resource:   resource.Name,
+						Versions:   []string{gv.Version},
+						Namespaced: resource.Namespaced,
 					}
 				} else {
 					x.Versions = append(x.Versions, gv.Version)
@@ -139,11 +145,6 @@ func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1
 		return nil, err
 	}
 
-	apiTypes, err := ListKinds(disc)
-	if err != nil {
-		return nil, err
-	}
-
 	// init status
 	in.Status.Quotas = make([]v1alpha1.ResourceQuotaStatus, len(in.Spec.Quotas))
 	for i := range in.Spec.Quotas {
@@ -153,18 +154,100 @@ func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1
 		}
 	}
 
-	used := map[schema.GroupKind]core.ResourceList{}
-
-	for _, ns := range nsList.Items {
-
+	apiTypes, err := ListKinds(disc)
+	if err != nil {
+		return nil, err
 	}
 
-	/*
-		GK
-		G
-		Group = "" Kind= ?
+	for _, ns := range nsList.Items {
+		nsUsed := map[schema.GroupKind]core.ResourceList{}
 
-	*/
+		for i, quota := range in.Status.Quotas {
+			gk := schema.GroupKind{
+				Group: quota.Group,
+				Kind:  quota.Kind,
+			}
+			used, found := nsUsed[gk]
+			if found {
+				quota.Used = used
+				in.Status.Quotas[i] = quota
+			} else if quota.Kind == "" {
+				for _, typeInfo := range apiTypes {
+					if typeInfo.Group == quota.Group {
+						used, found := nsUsed[schema.GroupKind{
+							Group: typeInfo.Group,
+							Kind:  typeInfo.Kind,
+						}]
+						if !found {
+							used, err = UsedQuota(kc, ns.Name, typeInfo)
+							if err != nil {
+								return nil, err
+							}
+							nsUsed[gk] = used
+						}
+						quota.Used = api.AddResourceList(quota.Used, used)
+					}
+				}
+			} else {
+				typeInfo, found := apiTypes[gk.String()]
+				if !found {
+					return nil, fmt.Errorf("can't detect api type info for %+v", gk)
+				}
+				used, err := UsedQuota(kc, ns.Name, typeInfo)
+				if err != nil {
+					return nil, err
+				}
+				nsUsed[gk] = used
+				quota.Used = api.AddResourceList(quota.Used, used)
+			}
+
+			in.Status.Quotas[i] = quota
+		}
+	}
 
 	return in, nil
+}
+
+func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList, error) {
+	gk := schema.GroupKind{
+		Group: typeInfo.Group,
+		Kind:  typeInfo.Kind,
+	}
+
+	if !typeInfo.Namespaced {
+		// Todo:
+		// No opinion?
+		return nil, fmt.Errorf("can't apply quota for non-namespaced resources %+v", gk)
+	}
+
+	var done bool
+	var used core.ResourceList
+	for _, version := range typeInfo.Versions {
+		gvk := gk.WithVersion(version)
+		if api.IsRegistered(gvk) {
+			done = true
+
+			var list unstructured.UnstructuredList
+			list.SetGroupVersionKind(gvk)
+			err := kc.List(context.TODO(), &list, client.InNamespace(ns))
+			if err != nil {
+				return nil, err
+			}
+
+			for _, obj := range list.Items {
+				limits, err := resourcemetrics.AppResourceLimits(obj.UnstructuredContent())
+				if err != nil {
+					return nil, err
+				}
+				used = api.AddResourceList(used, limits)
+			}
+			break
+		}
+	}
+	if !done {
+		// Todo:
+		// Don't error out
+		return nil, fmt.Errorf("resource calculator not defined for %+v", gk)
+	}
+	return used, nil
 }

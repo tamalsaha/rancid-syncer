@@ -3,21 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
-	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	clustermeta "kmodules.xyz/client-go/cluster"
-	uiv1alpha1 "kmodules.xyz/resource-metadata/apis/ui/v1alpha1"
 	"sort"
 
 	"github.com/pkg/errors"
+	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
 	kmapi "kmodules.xyz/client-go/api/v1"
-	rsapi "kmodules.xyz/resource-metadata/apis/meta/v1alpha1"
+	clustermeta "kmodules.xyz/client-go/cluster"
+	uiv1alpha1 "kmodules.xyz/resource-metadata/apis/ui/v1alpha1"
 	"kmodules.xyz/resource-metadata/client/clientset/versioned"
 	"kmodules.xyz/resource-metadata/hub/resourceeditors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,8 +37,8 @@ type PresetQuery struct {
 }
 
 type ChartPresetValues struct {
-	Source rsapi.SourceLocator   `json:"source"`
-	Values *runtime.RawExtension `json:"values"`
+	Source chartsapi.SourceLocator `json:"source"`
+	Values *runtime.RawExtension   `json:"values"`
 }
 
 func NewClient() (*rest.Config, versioned.Interface, client.Client, error) {
@@ -230,7 +229,7 @@ func bundleChartPresets(kc client.Client, ns string, sel labels.Selector, knownP
 		}
 
 		values = append(values, ChartPresetValues{
-			Source: rsapi.SourceLocator{
+			Source: chartsapi.SourceLocator{
 				Resource: kmapi.ResourceID{
 					Group:   chartsapi.GroupVersion.Group,
 					Version: chartsapi.GroupVersion.Version,
@@ -266,7 +265,7 @@ func bundleClusterChartPresets(kc client.Client, sel labels.Selector, knownPrese
 		}
 
 		values = append(values, ChartPresetValues{
-			Source: rsapi.SourceLocator{
+			Source: chartsapi.SourceLocator{
 				Resource: kmapi.ResourceID{
 					Group:   chartsapi.GroupVersion.Group,
 					Version: chartsapi.GroupVersion.Version,
@@ -330,7 +329,7 @@ func MergePresetValues(kc client.Client, ref chartsapi.ChartPresetFlatRef) ([]Ch
 			for _, ccp := range ccps {
 				if ref.Namespace == "" {
 					values = append(values, ChartPresetValues{
-						Source: rsapi.SourceLocator{
+						Source: chartsapi.SourceLocator{
 							Resource: kmapi.ResourceID{
 								Group:   chartsapi.GroupVersion.Group,
 								Version: chartsapi.GroupVersion.Version,
@@ -348,7 +347,7 @@ func MergePresetValues(kc client.Client, ref chartsapi.ChartPresetFlatRef) ([]Ch
 					err := kc.Get(context.TODO(), client.ObjectKey{Namespace: ref.Namespace, Name: ccp.Name}, &cp)
 					if err == nil {
 						values = append(values, ChartPresetValues{
-							Source: rsapi.SourceLocator{
+							Source: chartsapi.SourceLocator{
 								Resource: kmapi.ResourceID{
 									Group:   chartsapi.GroupVersion.Group,
 									Version: chartsapi.GroupVersion.Version,
@@ -363,7 +362,7 @@ func MergePresetValues(kc client.Client, ref chartsapi.ChartPresetFlatRef) ([]Ch
 						})
 					} else if apierrors.IsNotFound(err) {
 						values = append(values, ChartPresetValues{
-							Source: rsapi.SourceLocator{
+							Source: chartsapi.SourceLocator{
 								Resource: kmapi.ResourceID{
 									Group:   chartsapi.GroupVersion.Group,
 									Version: chartsapi.GroupVersion.Version,

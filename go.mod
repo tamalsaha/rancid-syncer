@@ -18,11 +18,11 @@ require (
 	kmodules.xyz/client-go v0.25.37
 	kmodules.xyz/custom-resources v0.25.2
 	kmodules.xyz/monitoring-agent-api v0.25.4
-	kmodules.xyz/resource-metadata v0.17.20
+	kmodules.xyz/resource-metadata v0.17.21
 	kmodules.xyz/resource-metrics v0.25.3
 	sigs.k8s.io/controller-runtime v0.13.1
 	sigs.k8s.io/yaml v1.3.0
-	x-helm.dev/apimachinery v0.0.11
+	x-helm.dev/apimachinery v0.0.12
 )
 
 require (

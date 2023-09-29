@@ -872,8 +872,8 @@ kmodules.xyz/monitoring-agent-api v0.25.4 h1:OwkvtV23QhUy3f7o9lxPWaAW3jiJMGAMPPR
 kmodules.xyz/monitoring-agent-api v0.25.4/go.mod h1:3LhrLDGQKQXhxYcjA/WNaO4HPpopYQzOutsEp2i3008=
 kmodules.xyz/offshoot-api v0.25.4 h1:IjJNvkphcdYUG8XO/pBwXpuP8W+jxAWJZ3yH8vgI/as=
 kmodules.xyz/offshoot-api v0.25.4/go.mod h1:PUk4EuJFhhyQykCflHj7EgXcljGIqs9vi0IN0RpxtY4=
-kmodules.xyz/resource-metadata v0.17.20 h1:WbHckgKzlxmWx3HUtHKg/iTZuAF7o1a+BP2I0+Dwflw=
-kmodules.xyz/resource-metadata v0.17.20/go.mod h1:OO4cEJehjCV54pI+l2a/V7zMnaTSDJsBHMKZ4IsGWx8=
+kmodules.xyz/resource-metadata v0.17.21 h1:ChALE4P8vhqdltH5Wtk4NQQPr9h99l41PoZ89fFgZN0=
+kmodules.xyz/resource-metadata v0.17.21/go.mod h1:tyLxzAVkhlL3/jFdcQcX1RZ8i8h9bs+AJur5RcuaW40=
 kmodules.xyz/resource-metrics v0.25.3 h1:g9EjNfYRrUSnbA4r+bUQefQ5Ban6I6rpKjnB3ER+Yew=
 kmodules.xyz/resource-metrics v0.25.3/go.mod h1:H7YLdUQJXUSzf5cNI4IYWU4Wsmrua/jpw7gqDnE3BwM=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
@@ -889,5 +889,5 @@ sigs.k8s.io/structured-merge-diff/v4 v4.2.3 h1:PRbqxJClWWYMNV1dhaG4NsibJbArud9kF
 sigs.k8s.io/structured-merge-diff/v4 v4.2.3/go.mod h1:qjx8mGObPmV2aSZepjQjbmb2ihdVs8cGKBraizNC69E=
 sigs.k8s.io/yaml v1.3.0 h1:a2VclLzOGrwOHDiV8EfBGhvjHvP46CtW5j6POvhYGGo=
 sigs.k8s.io/yaml v1.3.0/go.mod h1:GeOyir5tyXNByN85N/dRIT9es5UQNerPYEKK56eTBm8=
-x-helm.dev/apimachinery v0.0.11 h1:tUrxsKeRT84UCw+hHuV7isheWCv9yoS8m8lwWacVkZ4=
-x-helm.dev/apimachinery v0.0.11/go.mod h1:jjkebU6uv/cS/8pQGE8tbgK/rB39yh4ETiAglPbDWZc=
+x-helm.dev/apimachinery v0.0.12 h1:lEuGH5F+6xqL7/uL+SsoOUXeJZFgC8c2OQgtMMj/fQM=
+x-helm.dev/apimachinery v0.0.12/go.mod h1:jjkebU6uv/cS/8pQGE8tbgK/rB39yh4ETiAglPbDWZc=

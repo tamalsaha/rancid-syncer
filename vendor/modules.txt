@@ -709,7 +709,7 @@ kmodules.xyz/monitoring-agent-api/api/v1
 # kmodules.xyz/offshoot-api v0.25.4
 ## explicit; go 1.18
 kmodules.xyz/offshoot-api/api/v1
-# kmodules.xyz/resource-metadata v0.17.20-0.20230927041026-f43985eb8263
+# kmodules.xyz/resource-metadata v0.17.20
 ## explicit; go 1.18
 kmodules.xyz/resource-metadata/apis/core/v1alpha1
 kmodules.xyz/resource-metadata/apis/management
@@ -727,7 +727,7 @@ kmodules.xyz/resource-metadata/client/clientset/versioned/typed/meta/v1alpha1
 kmodules.xyz/resource-metadata/client/clientset/versioned/typed/ui/v1alpha1
 kmodules.xyz/resource-metadata/crds
 kmodules.xyz/resource-metadata/hub/resourceeditors
-# kmodules.xyz/resource-metrics v0.25.2
+# kmodules.xyz/resource-metrics v0.25.3
 ## explicit; go 1.18
 kmodules.xyz/resource-metrics
 kmodules.xyz/resource-metrics/api

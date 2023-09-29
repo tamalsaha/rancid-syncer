@@ -3,10 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
+	kmapi "kmodules.xyz/client-go/api/v1"
+	cu "kmodules.xyz/client-go/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sort"
 	"strings"
+	"sync"
 
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -70,13 +78,12 @@ func useKubebuilderClient() error {
 		return err
 	}
 
-	var pj v1alpha1.ProjectQuota
-	err = kc.Get(context.TODO(), client.ObjectKey{Name: "p-demo"}, &pj)
-	if err != nil {
-		return err
-	}
-
-	out, err := CalculateStatus(disc, kc, &pj)
+	rr := NewReconciler(kc, disc)
+	out, err := rr.Reconcile(context.TODO(), ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name: "p-demo",
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -101,6 +108,58 @@ func useKubebuilderClient() error {
 	return nil
 }
 
+// ProjectQuotaReconciler reconciles a ProjectQuota object
+type ProjectQuotaReconciler struct {
+	client.Client
+	disco  discovery.DiscoveryInterface
+	scheme *runtime.Scheme
+
+	mu       sync.Mutex
+	ctrl     controller.Controller
+	regTypes map[schema.GroupVersionKind]bool
+}
+
+func NewReconciler(kc client.Client, disco discovery.DiscoveryInterface) *ProjectQuotaReconciler {
+	return &ProjectQuotaReconciler{
+		Client:   kc,
+		disco:    disco,
+		scheme:   kc.Scheme(),
+		regTypes: make(map[schema.GroupVersionKind]bool),
+	}
+}
+
+func (r *ProjectQuotaReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	var pj v1alpha1.ProjectQuota
+	if err := r.Get(ctx, req.NamespacedName, &pj); err != nil {
+		log.Error(err, "unable to fetch ProjectQuota")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	fmt.Println("----------------", req)
+
+	err := r.CalculateStatus(&pj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	fmt.Println("---------------- DONE", req)
+
+	vt, err := cu.PatchStatus(context.TODO(), r.Client, &pj, func(in client.Object) client.Object {
+		obj := in.(*v1alpha1.ProjectQuota)
+		obj.Status = pj.Status
+
+		return obj
+	})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	log.Info(string(vt) + " ProjectQuota")
+
+	return ctrl.Result{}, nil
+}
+
 type APIType struct {
 	Group      string
 	Kind       string
@@ -110,8 +169,8 @@ type APIType struct {
 }
 
 // handle non-namespaced resource limits
-func ListKinds(disc discovery.DiscoveryInterface) (map[string]APIType, error) {
-	_, resourceList, err := disc.ServerGroupsAndResources()
+func (r *ProjectQuotaReconciler) ListKinds() (map[string]APIType, error) {
+	_, resourceList, err := r.disco.ServerGroupsAndResources()
 
 	apiTypes := map[string]APIType{}
 	if discovery.IsGroupDiscoveryFailedError(err) || err == nil {
@@ -158,33 +217,33 @@ func ListKinds(disc discovery.DiscoveryInterface) (map[string]APIType, error) {
 	return apiTypes, nil
 }
 
-func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1alpha1.ProjectQuota) (*v1alpha1.ProjectQuota, error) {
+func (r *ProjectQuotaReconciler) CalculateStatus(pj *v1alpha1.ProjectQuota) error {
 	var nsList core.NamespaceList
-	err := kc.List(context.TODO(), &nsList, client.MatchingLabels{
-		clustermeta.LabelKeyRancherFieldProjectId: in.Name,
+	err := r.List(context.TODO(), &nsList, client.MatchingLabels{
+		clustermeta.LabelKeyRancherFieldProjectId: pj.Name,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// init status
-	in.Status.Quotas = make([]v1alpha1.ResourceQuotaStatus, len(in.Spec.Quotas))
-	for i := range in.Spec.Quotas {
-		in.Status.Quotas[i] = v1alpha1.ResourceQuotaStatus{
-			ResourceQuotaSpec: in.Spec.Quotas[i],
+	pj.Status.Quotas = make([]v1alpha1.ResourceQuotaStatus, len(pj.Spec.Quotas))
+	for i := range pj.Spec.Quotas {
+		pj.Status.Quotas[i] = v1alpha1.ResourceQuotaStatus{
+			ResourceQuotaSpec: pj.Spec.Quotas[i],
 			Used:              core.ResourceList{},
 		}
 	}
 
-	apiTypes, err := ListKinds(disc)
+	apiTypes, err := r.ListKinds()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, ns := range nsList.Items {
 		nsUsed := map[schema.GroupKind]core.ResourceList{}
 
-		for i, quota := range in.Status.Quotas {
+		for i, quota := range pj.Status.Quotas {
 			gk := schema.GroupKind{
 				Group: quota.Group,
 				Kind:  quota.Kind,
@@ -192,7 +251,7 @@ func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1
 			used, found := nsUsed[gk]
 			if found {
 				quota.Used = used
-				in.Status.Quotas[i] = quota
+				pj.Status.Quotas[i] = quota
 			} else if quota.Kind == "" {
 				for _, typeInfo := range apiTypes {
 					if typeInfo.Group == quota.Group {
@@ -201,36 +260,36 @@ func CalculateStatus(disc discovery.DiscoveryInterface, kc client.Client, in *v1
 							Kind:  typeInfo.Kind,
 						}]
 						if !found {
-							used, err = UsedQuota(kc, ns.Name, typeInfo)
+							used, err = r.UsedQuota(ns.Name, typeInfo)
 							if err != nil {
-								return nil, err
+								return err
 							}
 							nsUsed[gk] = used
 						}
-						quota.Used = AddResourceList(quota.Used, used)
+						quota.Used = api.AddResourceList(quota.Used, used)
 					}
 				}
 			} else {
 				typeInfo, found := apiTypes[gk.String()]
 				if !found {
-					return nil, fmt.Errorf("can't detect api type info for %+v", gk)
+					return fmt.Errorf("can't detect api type info for %+v", gk)
 				}
-				used, err := UsedQuota(kc, ns.Name, typeInfo)
+				used, err := r.UsedQuota(ns.Name, typeInfo)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				nsUsed[gk] = used
-				quota.Used = AddResourceList(quota.Used, used)
+				quota.Used = api.AddResourceList(quota.Used, used)
 			}
 
-			in.Status.Quotas[i] = quota
+			pj.Status.Quotas[i] = quota
 		}
 	}
 
-	return in, nil
+	return nil
 }
 
-func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList, error) {
+func (r *ProjectQuotaReconciler) UsedQuota(ns string, typeInfo APIType) (core.ResourceList, error) {
 	gk := schema.GroupKind{
 		Group: typeInfo.Group,
 		Kind:  typeInfo.Kind,
@@ -251,7 +310,7 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 
 			var list unstructured.UnstructuredList
 			list.SetGroupVersionKind(gvk)
-			err := kc.List(context.TODO(), &list, client.InNamespace(ns))
+			err := r.List(context.TODO(), &list, client.InNamespace(ns))
 			if err != nil {
 				return nil, err
 			}
@@ -277,7 +336,7 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 					usage["limits."+k] = v
 				}
 
-				used = AddResourceList(used, usage)
+				used = api.AddResourceList(used, usage)
 			}
 			break
 		}
@@ -285,7 +344,7 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 	if !done {
 		var list unstructured.UnstructuredList
 		list.SetGroupVersionKind(gk.WithVersion(typeInfo.Versions[0]))
-		err := kc.List(context.TODO(), &list, client.InNamespace(ns))
+		err := r.List(context.TODO(), &list, client.InNamespace(ns))
 		if err != nil {
 			return nil, err
 		}
@@ -298,47 +357,65 @@ func UsedQuota(kc client.Client, ns string, typeInfo APIType) (core.ResourceList
 	return used, nil
 }
 
-func AddResourceList(x, y core.ResourceList) core.ResourceList {
-	names := sets.NewString()
-	for k := range x {
-		names.Insert(string(k))
+// SetupWithManager sets up the controller with the Manager.
+func (r *ProjectQuotaReconciler) SetupWithManager(mgr ctrl.Manager) (*ProjectQuotaReconciler, error) {
+	ctrl, err := ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ProjectQuota{}).
+		Build(r)
+	if err != nil {
+		return nil, err
 	}
-	for k := range y {
-		names.Insert(string(k))
-	}
-
-	result := core.ResourceList{}
-	for _, fullName := range names.UnsortedList() {
-		_, name, found := strings.Cut(fullName, ".")
-		var rf resource.Format
-		if found {
-			rf = resourceFormat(core.ResourceName(name))
-		} else {
-			rf = resourceFormat(core.ResourceName(fullName))
-		}
-
-		sum := resource.Quantity{Format: rf}
-		sum.Add(*x.Name(core.ResourceName(fullName), rf))
-		sum.Add(*y.Name(core.ResourceName(fullName), rf))
-		if !sum.IsZero() {
-			result[core.ResourceName(fullName)] = sum
-		}
-	}
-	return result
+	r.ctrl = ctrl
+	return r, nil
 }
 
-func resourceFormat(name core.ResourceName) resource.Format {
-	switch name {
-	case core.ResourceCPU:
-		return resource.DecimalSI
-	case core.ResourceMemory:
-		return resource.BinarySI
-	case core.ResourceStorage:
-		return resource.BinarySI
-	case core.ResourcePods:
-		return resource.DecimalSI
-	case core.ResourceEphemeralStorage:
-		return resource.BinarySI
+func (r *ProjectQuotaReconciler) StartWatcher(rid kmapi.ResourceID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.ctrl == nil {
+		klog.Fatalln("ProjectQuota reconciler is not setup yet!")
 	}
-	return resource.BinarySI // panic ?
+
+	gvk := rid.GroupVersionKind()
+	if gvk.Kind == "" {
+		klog.Fatalln("can't start ProjectQuota reconciler for unknown Kind!")
+	}
+
+	if api.IsRegistered(gvk) && !r.regTypes[gvk] {
+		var obj unstructured.Unstructured
+		obj.SetGroupVersionKind(gvk)
+		err := r.ctrl.Watch(
+			&source.Kind{Type: &obj},
+			handler.EnqueueRequestsFromMapFunc(ProjectQuotaForObjects(r.Client)),
+		)
+		if err != nil {
+			klog.Fatalln(err)
+		}
+		r.regTypes[gvk] = true
+	}
+}
+
+// Obj -> ProjectQuota
+func ProjectQuotaForObjects(kc client.Client) func(_ client.Object) []reconcile.Request {
+	return func(obj client.Object) []reconcile.Request {
+		if obj.GetNamespace() == "" {
+			return nil
+		}
+
+		var ns core.Namespace
+		err := kc.Get(context.TODO(), client.ObjectKey{Name: obj.GetNamespace()}, &ns)
+		if err != nil {
+			klog.Error(err)
+			return nil
+		}
+
+		projectId, found := ns.Labels[clustermeta.LabelKeyRancherFieldProjectId]
+		if !found {
+			return nil
+		}
+		return []reconcile.Request{
+			{NamespacedName: types.NamespacedName{Name: projectId}},
+		}
+	}
 }

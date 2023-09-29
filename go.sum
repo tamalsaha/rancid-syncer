@@ -872,10 +872,10 @@ kmodules.xyz/monitoring-agent-api v0.25.4 h1:OwkvtV23QhUy3f7o9lxPWaAW3jiJMGAMPPR
 kmodules.xyz/monitoring-agent-api v0.25.4/go.mod h1:3LhrLDGQKQXhxYcjA/WNaO4HPpopYQzOutsEp2i3008=
 kmodules.xyz/offshoot-api v0.25.4 h1:IjJNvkphcdYUG8XO/pBwXpuP8W+jxAWJZ3yH8vgI/as=
 kmodules.xyz/offshoot-api v0.25.4/go.mod h1:PUk4EuJFhhyQykCflHj7EgXcljGIqs9vi0IN0RpxtY4=
-kmodules.xyz/resource-metadata v0.17.20-0.20230927041026-f43985eb8263 h1:30VmXxlMuGq+15nLaRplbUaqzBXTPFbNpga5u/jZZio=
-kmodules.xyz/resource-metadata v0.17.20-0.20230927041026-f43985eb8263/go.mod h1:UTlIPNpIvl9jbLdTrLznCx8dLJO0Z798bcQi6SSovlo=
-kmodules.xyz/resource-metrics v0.25.2 h1:BwCb6qyunvQBa0u8UUkw+wYG5/T4qtNtAKcHjSsk0JU=
-kmodules.xyz/resource-metrics v0.25.2/go.mod h1:ZK/52NLuwMk+Jt0bmUtGQHtSxPLYYpsFILG7SJhYPg0=
+kmodules.xyz/resource-metadata v0.17.20 h1:WbHckgKzlxmWx3HUtHKg/iTZuAF7o1a+BP2I0+Dwflw=
+kmodules.xyz/resource-metadata v0.17.20/go.mod h1:OO4cEJehjCV54pI+l2a/V7zMnaTSDJsBHMKZ4IsGWx8=
+kmodules.xyz/resource-metrics v0.25.3 h1:g9EjNfYRrUSnbA4r+bUQefQ5Ban6I6rpKjnB3ER+Yew=
+kmodules.xyz/resource-metrics v0.25.3/go.mod h1:H7YLdUQJXUSzf5cNI4IYWU4Wsmrua/jpw7gqDnE3BwM=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
 rsc.io/sampler v1.3.0/go.mod h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=

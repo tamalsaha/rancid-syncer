@@ -58,7 +58,7 @@ func useKubebuilderClient() error {
 		return err
 	}
 
-	vcluster, err := Detectvcluster(kc)
+	vcluster, err := IsVCluster(kc)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ status:
 	- address: 10.96.163.162
 	  type: InternalIP
 */
-func Detectvcluster(kc client.Client) (bool, error) {
+func IsVCluster(kc client.Client) (bool, error) {
 	var list core.NodeList
 	err := kc.List(context.TODO(), &list)
 	if err != nil {

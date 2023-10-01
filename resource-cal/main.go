@@ -295,6 +295,7 @@ func (r *ProjectQuotaReconciler) CalculateStatus(pj *v1alpha1.ProjectQuota) erro
 					Used:   used,
 				}
 				quota.Used = api.AddResourceList(quota.Used, used)
+				quota.Result = result
 			}
 
 			pj.Status.Quotas[i] = quota

@@ -1,0 +1,29 @@
+apiVersion: charts.x-helm.dev/v1alpha1
+kind: ChartPreset
+metadata:
+  name: capi-presets
+  namespace: default
+spec:
+  values:
+    form:
+      a: b
+---
+apiVersion: charts.x-helm.dev/v1alpha1
+kind: ChartPreset
+metadata:
+  name: capi-presets
+  namespace: kube-system
+spec:
+  values:
+    form:
+      a: c
+---
+apiVersion: charts.x-helm.dev/v1alpha1
+kind: ChartPreset
+metadata:
+  name: capi-presets2
+  namespace: kube-system
+spec:
+  values:
+    form:
+      a: c

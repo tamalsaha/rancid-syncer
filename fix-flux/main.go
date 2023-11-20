@@ -6,75 +6,60 @@ import (
 )
 
 func main() {
-	y1 := `    ace:
-      enabled: false
-      version: "v2023.10.18"
-    cert-manager-csi-driver-cacerts:
-      enabled: true
-      version: "v2023.10.1"
-    cert-manager-webhook-ace:
-      enabled: true
-      version: "v2023.10.18"
-    cert-manager:
-      enabled: true
-      version: "v1.11.0"
-      values: # +doc-gen:break
-        installCRDs: true
-    kubedb:
-      enabled: true
-      version: "v2023.10.26-rc.0"
-      values: # +doc-gen:break
-        kubedb-provisioner:
-          enabled: true
-        kubedb-catalog:
-          enabled: true
-        kubedb-ops-manager:
-          enabled: true
-        kubedb-autoscaler:
-          enabled: false
-        kubedb-dashboard:
-          enabled: false
-        kubedb-schema-manager:
-          enabled: false
-        kubedb-metrics:
-          enabled: false
-    docker-machine-operator:
-      enabled: true
-      version: "v2023.10.18"
-    external-dns-operator:
-      enabled: true
-      version: "v2023.10.1"
-    kube-ui-server:
-      enabled: true
-      version: "v2023.10.1"
-    license-proxyserver:
-      enabled: true
-      version: "v2023.10.18"
-    reloader:
-      enabled: true
-      version: "v1.0.24"
-    kube-prometheus-stack:
-      enabled: true
-      version: "52.1.0"
-    opscenter-features:
-      enabled: true
-      version: "v2023.10.18"
-    panopticon:
-      enabled: true
-      version: "v2023.10.1"
-      values: # +doc-gen:break
-        monitoring:
-          enabled: true
-          agent: prometheus.io/operator
-          serviceMonitor:
-            labels:
-              release: kube-prometheus-stack
-    stash:
-      enabled: true
-      version: "v2023.10.9"
-      values: # +doc-gen:break
-        features:
-          enterprise: true`
+	y1 := `host: go.bytebuilders.dev
+
+paths:
+  /appcatalog:
+    repo: https://github.com/bytebuilders/appcatalog
+  /ace:
+    repo: https://github.com/bytebuilders/ace
+  /audit:
+    repo: https://github.com/bytebuilders/audit
+  /b3:
+    repo: https://github.com/bytebuilders/b3
+  /capi-config:
+    repo: https://github.com/bytebuilders/capi-config
+  /capa-vpc-peering-operator:
+    repo: https://github.com/bytebuilders/capa-vpc-peering-operator
+  /lib-selfhost:
+    repo: https://github.com/bytebuilders/lib-selfhost
+  /cert-manager-webhook-ace:
+    repo: https://github.com/bytebuilders/cert-manager-webhook-ace
+  /cloudflare-dns-proxy:
+    repo: https://github.com/bytebuilders/cloudflare-dns-proxy
+  /smtprelay:
+    repo: https://github.com/bytebuilders/smtprelay
+  /client:
+    repo: https://github.com/bytebuilders/client-go
+  /configurator:
+    repo: https://github.com/bytebuilders/configurator
+  /installer:
+    repo: https://github.com/bytebuilders/installer
+  /kube-auth-manager:
+    repo: https://github.com/bytebuilders/kube-auth-manager
+  /kube-bind-server:
+    repo: https://github.com/bytebuilders/kube-bind-server
+  /license-proxyserver:
+    repo: https://github.com/bytebuilders/license-proxyserver
+  /license-tester:
+    repo: https://github.com/bytebuilders/license-tester
+  /license-verifier:
+    repo: https://github.com/bytebuilders/license-verifier
+    versions:
+      - kubernetes
+  /nats-logger:
+    repo: https://github.com/bytebuilders/nats-logger
+  /offline-license-server:
+    repo: https://github.com/bytebuilders/offline-license-server
+  /products:
+    repo: https://github.com/bytebuilders/products
+  /resource-model:
+    repo: https://github.com/bytebuilders/resource-model
+  /uibuilder-tools:
+    repo: https://github.com/bytebuilders/uibuilder-tools
+  /ui-wizards:
+    repo: https://github.com/bytebuilders/ui-wizards
+`
 
 	var obj map[string]any
 	err := yaml.Unmarshal([]byte(y1), &obj)

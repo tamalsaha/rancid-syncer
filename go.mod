@@ -9,6 +9,7 @@ require (
 	github.com/onsi/gomega v1.27.4
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.59.1
+	github.com/spf13/pflag v1.0.5
 	go.openviz.dev/apimachinery v0.0.6-0.20230919100707-22d79295a524
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	gomodules.xyz/pointer v0.1.0
@@ -81,7 +82,6 @@ require (
 	github.com/sergi/go-diff v1.2.0 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.8.3 // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect

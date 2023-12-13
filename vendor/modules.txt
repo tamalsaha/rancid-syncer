@@ -698,6 +698,7 @@ kmodules.xyz/client-go/cluster
 kmodules.xyz/client-go/core/v1
 kmodules.xyz/client-go/meta
 kmodules.xyz/client-go/tools/clusterid
+kmodules.xyz/client-go/tools/parser
 # kmodules.xyz/custom-resources v0.25.2
 ## explicit; go 1.18
 kmodules.xyz/custom-resources/apis/appcatalog

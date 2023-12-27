@@ -18,7 +18,6 @@ package parser
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -53,10 +52,8 @@ func processResources(filename string, data []byte, fn ResourceFn) error {
 		if err == io.EOF {
 			break
 		} else if IsYAMLSyntaxError(err) {
-			fmt.Println(filename, err.Error())
 			continue
 		} else if runtime.IsMissingKind(err) {
-			fmt.Println(filename, err.Error())
 			continue
 		} else if err != nil {
 			return err

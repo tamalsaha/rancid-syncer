@@ -1,5 +1,7 @@
 ```mermaid
-  graph FG;
-    kubedb-provider-aws-->crossplane;
-    kubedb-provider-azure-->crossplane;
+  graph TD;
+      A-->B;
+      A-->C;
+      B-->D;
+      C-->D;
 ```
